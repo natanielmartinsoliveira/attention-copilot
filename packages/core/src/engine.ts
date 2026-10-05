@@ -213,11 +213,42 @@ export class AttentionEngine {
       add("URGENT_REQUEST", 90);
       requiresResponse = true;
     }
+    // Contextual types fire only when tied to the user (name, recent
+    // ownership context, a profile project or expertise): §66 silence.
+    const project = profile.projects.some((p) =>
+      t.includes(normalize(p.name)),
+    );
+    const area = prior || project || expertise;
+    if (
+      (named || area) &&
+      /\b(discordo|nao concordo|conflito|vai quebrar|contradiz|nao faz sentido)\b/.test(
+        t,
+      )
+    ) {
+      add("CONFLICT", named ? 70 : 55);
+      if (named) requiresResponse = true;
+    }
+    if (
+      !named &&
+      area &&
+      /\b(decidimos|ficou decidido|foi decidido|vamos mudar|mudamos|foi cancelad\w*|foi adiad\w*|novo prazo)\b/.test(
+        t,
+      )
+    ) {
+      add("IMPORTANT_CONTEXT", 45);
+      confidence = Math.min(confidence, 0.65);
+    }
     if (
       !types.length &&
-      profile.projects.some((p) => normalize(t).includes(normalize(p.name)))
-    )
-      add("USER_TOPIC", 40);
+      area &&
+      /\b(precisamos (?:fazer|implementar|corrigir|criar|ajustar)|vamos (?:implementar|corrigir|criar|refatorar|ajustar)|tarefa|ticket|card)\b/.test(
+        t,
+      )
+    ) {
+      add("TASK_DISCUSSION", 38);
+      confidence = Math.min(confidence, 0.65);
+    }
+    if (!types.length && project) add("USER_TOPIC", 40);
     if (!types.length) return none();
     const weighted = Math.max(
       ...types.map((x) => (base[x] ?? score) * settings.weights[x]),
@@ -239,6 +270,10 @@ export class AttentionEngine {
       INDIRECT_QUESTION: "Pergunta ligada à sua responsabilidade no contexto",
       TASK_ASSIGNED: "Tarefa atribuída a você",
       USER_RESPONSIBILITY: "Você foi citado como responsável",
+      TASK_DISCUSSION: "Discussão de tarefa ligada ao seu trabalho",
+      IMPORTANT_CONTEXT: "Decisão ou mudança que afeta seu trabalho",
+      CONFLICT: "Divergência envolvendo você ou seu trabalho",
+      USER_TOPIC: "Assunto de um dos seus projetos",
       DEADLINE: "Prazo mencionado",
       BLOCKER: "O avanço depende desta resposta",
       FOLLOW_UP: "Aguardam sua resposta",

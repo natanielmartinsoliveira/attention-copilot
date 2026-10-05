@@ -237,6 +237,75 @@ describe("spec examples §7 / §8", () => {
     expect(["MEDIUM", "HIGH"]).toContain(level(d.score));
   });
 });
+describe("silence corpus: ordinary meeting talk never interrupts", () => {
+  const neutral = [
+    "Bom dia pessoal, vamos começar.",
+    "Alguém consegue compartilhar a tela?",
+    "O deploy de ontem foi tranquilo.",
+    "Atualizamos o React para a versão 19.",
+    "O cenário mudou bastante com React.",
+    "Vou mandar o link no chat.",
+    "Podemos seguir para o próximo item?",
+    "A Maria vai cuidar do layout.",
+    "Natália, você consegue verificar?",
+    "Precisamos disso antes das 17h.",
+    "Sem isso não conseguimos fazer o deploy.",
+    "Decidimos usar Postgres.",
+    "Isso não faz sentido nenhum, João.",
+    "Precisamos corrigir o layout.",
+    "Alguém sabe se o café chegou?",
+  ];
+  for (const text of neutral)
+    it(text, () => expect(detect(text).score).toBeLessThanOrEqual(20));
+});
+describe("contextual types: only when tied to the user", () => {
+  const owns = ["Nataniel trabalha nessa API."];
+  const withProject = {
+    ...defaultProfile,
+    projects: [{ name: "Pagamentos", importance: 90 }],
+  };
+  const run = (text: string, ctx: string[] = [], profile = defaultProfile) =>
+    engine.detect(
+      seg(text),
+      ctx.map((x) => seg(x, now - 1000)),
+      profile,
+      defaultSettings,
+    );
+  it("decision affecting the user's area is IMPORTANT_CONTEXT, MEDIUM", () => {
+    const d = run("Decidimos mudar o endpoint para a versão 2.", owns);
+    expect(d.types).toContain("IMPORTANT_CONTEXT");
+    expect(level(d.score)).toBe("MEDIUM");
+    expect(d.requiresResponse).toBe(false);
+  });
+  it("same decision with no tie to the user stays silent", () =>
+    expect(run("Decidimos mudar o endpoint para a versão 2.").score).toBe(18));
+  it("disagreement aimed at the user is a CONFLICT that needs a response", () => {
+    const d = run("Nataniel, discordo da sua proposta de cache.");
+    expect(d.types).toContain("CONFLICT");
+    expect(d.requiresResponse).toBe(true);
+    expect(level(d.score)).toBe("HIGH");
+  });
+  it("disagreement about the user's project is a MEDIUM CONFLICT", () => {
+    const d = run("Não concordo com o fluxo de pagamentos atual.", [], withProject);
+    expect(d.types).toContain("CONFLICT");
+    expect(level(d.score)).toBe("MEDIUM");
+    expect(d.requiresResponse).toBe(false);
+  });
+  it("unrelated disagreement stays silent", () =>
+    expect(run("Eu discordo do layout novo.").score).toBe(18));
+  it("task talk in the user's project is a LOW TASK_DISCUSSION", () => {
+    const d = run("Vamos implementar o novo fluxo de pagamentos.", [], withProject);
+    expect(d.types).toContain("TASK_DISCUSSION");
+    expect(level(d.score)).toBe("LOW");
+    expect(d.requiresResponse).toBe(false);
+  });
+  it("task talk in the user's expertise is TASK_DISCUSSION", () =>
+    expect(run("Precisamos corrigir a configuração da AWS.").types).toContain(
+      "TASK_DISCUSSION",
+    ));
+  it("unrelated task talk stays silent", () =>
+    expect(run("Precisamos corrigir o layout.").score).toBe(18));
+});
 describe("lifecycle and fatigue", () => {
   it("§14 unanswered follow-ups group into one escalating event", () => {
     const m = make(),
