@@ -16,11 +16,13 @@ import {
 } from "../../../packages/core/src/types.js";
 const state = new State(),
   token = process.env.ATTENTION_TOKEN || randomBytes(24).toString("hex");
+const port = Number(process.env.PORT || 4317);
 const allowed = new Set([
   "http://127.0.0.1:5173",
   "http://localhost:5173",
-  "http://127.0.0.1:4317",
-  "http://localhost:4317",
+  // The UI is served by this process, so its origin follows PORT.
+  `http://127.0.0.1:${port}`,
+  `http://localhost:${port}`,
   "http://tauri.localhost",
   "https://tauri.localhost",
   "tauri://localhost",
@@ -38,6 +40,11 @@ const str = (x: unknown, max = 200) => {
 const num = (x: unknown, min: number, max: number) => {
   if (typeof x !== "number" || !Number.isFinite(x) || x < min || x > max)
     throw Error("Número inválido");
+  return x;
+};
+const bool = (x: unknown, fallback: boolean) => {
+  if (x === undefined) return fallback;
+  if (typeof x !== "boolean") throw Error("Valor inválido");
   return x;
 };
 const strings = (x: unknown) => {
@@ -142,6 +149,10 @@ class Api {
             cooldownMs: num(b.cooldownMs, 1000, 600000),
             retentionHours: num(b.retentionHours, 1, 720),
             weights,
+            urgentSound: bool(
+              b.urgentSound,
+              state.data.settings.urgentSound ?? false,
+            ),
           });
           return res.json({ ok: true });
         }
@@ -257,10 +268,10 @@ async function main() {
         );
   });
   app.useStaticAssets(resolve("dist-ui"));
-  await app.listen(Number(process.env.PORT || 4317), "127.0.0.1");
+  await app.listen(port, "127.0.0.1");
   const interval = setInterval(() => state.tick(), 5000);
   console.log(
-    `Attention Copilot: http://127.0.0.1:${process.env.PORT || 4317}`,
+    `Attention Copilot: http://127.0.0.1:${port}`,
   );
   console.log(`Código de acesso local: ${token}`);
   const shutdown = async () => {

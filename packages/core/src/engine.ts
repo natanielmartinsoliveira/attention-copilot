@@ -1,4 +1,5 @@
 import {
+  type AlertChannel,
   type AttentionEvent,
   type Detection,
   type EventType,
@@ -376,13 +377,44 @@ export class MeetingPriorityEngine {
       best.attentionScore >= 61 &&
       best.attentionScore - (current?.attentionScore ?? 0) >= delta &&
       (event?.confidence ?? 0) >= 0.7;
+    if (change)
+      return {
+        meetingId: best.id,
+        switchAttention: true,
+        state: "SWITCH",
+        eventId: event?.id,
+        reason: `${best.title} precisa de atenção: ${event?.reason ?? "Prioridade elevada"}`,
+        confidence: event?.confidence ?? 0.6,
+      };
+    // Relevant outside the focus but below the switch bar (confidence or
+    // delta): surface it as 🟡 instead of pretending certainty either way.
+    const possible = active
+      .filter((m) => m.id !== focusId)
+      .flatMap((m) =>
+        m.events.filter((e) => isOpen(e) && e.score > 40).map((e) => ({ m, e })),
+      )
+      .sort((a, b) => b.e.score - a.e.score)[0];
+    if (possible)
+      return {
+        meetingId: focusId,
+        switchAttention: false,
+        state: "POSSIBLE",
+        eventId: possible.e.id,
+        reason: `Possível necessidade de atenção em ${possible.m.title}: ${possible.e.reason}`,
+        confidence: possible.e.confidence,
+      };
     return {
-      meetingId: change ? best.id : focusId,
-      switchAttention: change,
-      reason: change
-        ? `${best.title} precisa de atenção: ${event?.reason ?? "Prioridade elevada"}`
-        : "Tudo tranquilo. Você pode continuar focado.",
-      confidence: change ? (event?.confidence ?? 0.6) : 0.8,
+      meetingId: focusId,
+      switchAttention: false,
+      state: "CALM",
+      reason: "Tudo tranquilo. Você pode continuar focado.",
+      confidence: 0.8,
     };
   }
+}
+export function alertChannel(e: AttentionEvent): AlertChannel {
+  if (!isOpen(e) || e.level === "NONE") return "NONE";
+  // Desktop delivery only when shouldNotify passed (score, confidence, cooldown).
+  if (e.notifiedAt) return e.level === "URGENT" ? "URGENT" : "DESKTOP";
+  return e.level === "LOW" ? "BADGE" : "DISCREET";
 }

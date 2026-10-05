@@ -17,6 +17,21 @@ export async function notify(title: string, body: string) {
   } else if ("Notification" in window && Notification.permission === "granted")
     new Notification(title, { body, silent: true });
 }
+/** Short, quiet sine chime for URGENT alerts (opt-in); never a siren. */
+export async function playSoftTone() {
+  const ctx = new AudioContext();
+  const osc = ctx.createOscillator(),
+    gain = ctx.createGain(),
+    t = ctx.currentTime;
+  osc.frequency.value = 660;
+  gain.gain.setValueAtTime(0, t);
+  gain.gain.linearRampToValueAtTime(0.06, t + 0.03);
+  gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.35);
+  osc.connect(gain).connect(ctx.destination);
+  osc.start(t);
+  osc.stop(t + 0.4);
+  osc.onended = () => void ctx.close();
+}
 export async function miniWindow(compact: boolean) {
   if ("__TAURI_INTERNALS__" in window) {
     const { getCurrentWindow, LogicalSize } = await import(

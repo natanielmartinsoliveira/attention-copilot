@@ -96,13 +96,22 @@ export interface Settings {
   expireMs: number;
   retentionHours: number;
   weights: Record<EventType, number>;
+  /** Soft tone for URGENT alerts; off by default. */
+  urgentSound: boolean;
 }
+/** CALM 🟢 · POSSIBLE 🟡 (relevant but not certain enough to switch) · SWITCH 🔴 */
+export type RecommendationState = "CALM" | "POSSIBLE" | "SWITCH";
 export interface Recommendation {
   meetingId: string | null;
   switchAttention: boolean;
+  state: RecommendationState;
+  /** Event behind a POSSIBLE/SWITCH recommendation, for "Ver contexto". */
+  eventId?: string;
   reason: string;
   confidence: number;
 }
+/** How an open event reaches the user (§17): never louder than the engine decided. */
+export type AlertChannel = "NONE" | "BADGE" | "DISCREET" | "DESKTOP" | "URGENT";
 export interface AppState {
   meetings: Meeting[];
   profile: UserProfile;
@@ -142,4 +151,5 @@ export const defaultSettings: Settings = {
     EventType,
     number
   >,
+  urgentSound: false,
 };

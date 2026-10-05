@@ -54,6 +54,9 @@ assert.ok(
     "Mude sua atenção",
   ),
 );
+assert.equal(await page.locator(".recommendation.urgent").count(), 1);
+assert.equal(await page.locator("header .badge").innerText(), "1");
+assert.equal(await page.locator(".event.urgent-event").count(), 1);
 await mkdir("docs/screenshots", { recursive: true });
 await page.screenshot({
   path: "docs/screenshots/dashboard.png",
@@ -66,9 +69,25 @@ await page
 await page.getByRole("dialog").waitFor();
 assert.ok((await page.getByRole("dialog").innerText()).includes("endpoint"));
 await page.getByRole("button", { name: "Fechar", exact: true }).click();
-await page.getByRole("button", { name: "Ver contexto", exact: true }).click();
+await page
+  .locator(".recommendation")
+  .getByRole("button", { name: "Ver contexto", exact: true })
+  .click();
 assert.ok((await page.getByRole("dialog").innerText()).includes("BLOCKER"));
 await page.getByRole("button", { name: "Fechar", exact: true }).click();
+await page.locator("header .badge").waitFor({ state: "detached" });
+await page
+  .locator(".event")
+  .getByRole("button", { name: "Ver contexto", exact: true })
+  .click();
+assert.ok((await page.getByRole("dialog").innerText()).includes("BLOCKER"));
+await page.getByRole("button", { name: "Fechar", exact: true }).click();
+const sound = page.getByRole("button", { name: "Som em urgentes", exact: true });
+await sound.click();
+await page
+  .getByRole("button", { name: "✓ Som suave em urgentes", exact: true })
+  .click();
+await sound.waitFor();
 await page.getByRole("button", { name: "Gerar resposta", exact: true }).click();
 await page
   .getByLabel("Resposta Curta")
@@ -83,6 +102,32 @@ await page.getByRole("button", { name: "Respondido", exact: true }).click();
 await page.waitForFunction(
   () => document.querySelectorAll(".score strong")[1]?.textContent === "18",
 );
+// Low-confidence request in the other meeting: 🟡 possible, never a switch.
+const post = (path, body) =>
+  fetch(`${base}/api/${path}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+await post("capture/start", {});
+const t = Date.now();
+await post("transcript", {
+  id: "ui-possible",
+  meetingId: "backend",
+  speakerId: "Voz não identificada",
+  text: "Nataniel, consegue verificar o endpoint agora?",
+  startTime: t - 1000,
+  endTime: t,
+  confidence: 0.61,
+});
+await page.locator(".recommendation.possible").waitFor();
+assert.ok(
+  (await page.locator(".recommendation").innerText()).includes("61%"),
+);
+await post("stop", {});
 await page.getByRole("button", { name: "Configurar", exact: true }).click();
 const config = JSON.parse(
   await page.getByLabel("Configuração do perfil").inputValue(),

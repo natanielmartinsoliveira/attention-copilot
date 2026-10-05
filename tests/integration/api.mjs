@@ -57,6 +57,19 @@ assert.equal(
   (await request("settings", { minAttentionDelta: -1 })).status,
   400,
 );
+{
+  const base = { minAttentionDelta: 25, cooldownMs: 30000, retentionHours: 24 };
+  assert.equal(
+    (await request("settings", { ...base, urgentSound: "yes" })).status,
+    400,
+  );
+  assert.equal(
+    (await request("settings", { ...base, urgentSound: true })).status,
+    200,
+  );
+  assert.equal((await request("state")).data.settings.urgentSound, true);
+  await request("settings", { ...base, urgentSound: false });
+}
 const socket = io(base, { auth: { token }, transports: ["websocket"] });
 let updates = 0;
 socket.on("state", () => updates++);

@@ -58,3 +58,22 @@ do Playwright e localhost:4317.
 
 As limitações de ambiente não foram substituídas por resultados simulados.
 Demo e testes por texto validam o motor, não certificam a captura real.
+
+## Revalidação — 2026-10-05
+
+Executada no WSL Ubuntu 24.04 com Node.js 24.21.0, após a revisão de código.
+
+- 51 testes Vitest, incluindo: dispensa vs. bloqueio negado, dispensa por
+  assunto, pesos por tipo, decaimento, broadcast só com mudança visível, estado
+  🟡 POSSIBLE, canais de alerta por nível, `PcmBlocker` e fontes simuladas.
+- Integração HTTP/WebSocket em modo memória, incluindo `urgentSound` e perfil
+  com item nulo.
+- Integração HTTP/WebSocket em modo infra contra PostgreSQL, Redis e RabbitMQ
+  reais (Docker Compose), com restart e recarga do snapshot.
+- Integração browser headless: além do anterior, recomendação 🔴 com "Ver
+  contexto", badge de não vistos, destaque urgente, estado 🟡 com 61% de
+  confiança e alternância do som em urgentes.
+
+Ainda não validado: Tauri/Rust no Windows, captura real de duas reuniões,
+worker Python (testes não executados nesta revalidação). O RabbitMQ do Compose
+saiu com código 1 em algumas subidas com volume novo; investigar.

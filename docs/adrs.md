@@ -27,6 +27,11 @@ O desktop Teams requer validação no hardware e versão reais antes de declarar
 suporte. Alternativa para MVP: Meet e Teams web em abas selecionadas.
 **Consequência:** uso browser real pode funcionar, mas não certifica desktop
 Teams. Nenhum áudio misturado será rotulado como streams independentes.
+**Enquanto isso:** `SystemAudioSource` e `ApplicationAudioSource` têm apenas
+implementações simuladas (`apps/desktop/src/simulated-audio.ts`), que tocam um
+buffer PCM em tempo real pelo mesmo `PcmBlocker` da captura de aba. Próximo
+passo: comando Tauri em Rust com WASAPI process loopback que entregue frames
+PCM 16 kHz ao mesmo `PcmBlocker`, validado com duas reuniões reais.
 Referências: https://learn.microsoft.com/en-us/samples/microsoft/windows-classic-samples/applicationloopbackaudio-sample/ ;
 https://developer.chrome.com/docs/extensions/how-to/web-platform/screen-capture ;
 https://developer.chrome.com/docs/extensions/reference/api/tabCapture .

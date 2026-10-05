@@ -525,3 +525,51 @@ footer {
     flex-direction: column;
   }
 }
+/* §17 alert tiers and §66 uncertain state */
+.possible {
+  background: #262413;
+  border-color: #6b6233;
+}
+.possible .radar {
+  color: #f0d77a;
+  border-color: #a8924a;
+}
+.recommendation > button + button {
+  margin-left: 0;
+}
+.badge {
+  min-width: 22px;
+  height: 22px;
+  padding: 0 7px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 11px;
+  background: #3a3220;
+  border: 1px solid #6b6233;
+  color: #f0d77a;
+  font-size: 12px;
+  font-weight: 600;
+}
+.toast {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 20;
+  max-width: min(420px, calc(100vw - 32px));
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  background: #1b2534;
+  border: 1px solid #6b6233;
+  border-radius: 10px;
+  font-size: 13px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 35%);
+}
+.toast span {
+  flex: 1;
+}
+.event.urgent-event {
+  border-color: #c5785a;
+  box-shadow: inset 4px 0 0 #ff8a65;
+}

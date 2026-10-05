@@ -33,6 +33,11 @@ Para desenvolver: `npm run dev`. Verificação: `npm run check`, `npm test`.
 - Score, comparação de reuniões, limite de diferença, cooldown, agrupamento,
   escalada, expiração, idempotência e ciclo de vida dos eventos.
 - Centro de atenção, contexto, busca, filtros, foco manual e AUTO por interação.
+- Recomendação em três estados: 🟢 tranquilo, 🟡 possível (relevante, mas sem
+  confiança ou diferença suficiente para pedir troca) e 🔴 trocar de foco.
+- Alertas por nível: LOW só conta no badge; MEDIUM e pedidos sem confiança
+  suficiente geram aviso discreto na interface; HIGH notificação desktop;
+  URGENT notificação + destaque + som suave opcional (desligado por padrão).
 - Catch-up do período fora do foco e extrato essencial de eventos relevantes.
 - Respostas conservadoras editáveis; nenhuma execução/envio de resposta.
 - Perfil, projetos, pessoas, expertise e pesos editáveis em formulário JSON.
@@ -119,6 +124,8 @@ Captura de abas usa a interface web, não o WebView do Tauri.
 ## O que ainda não está entregue
 
 - Captura WASAPI por processo e integrações nativas Meet/Teams.
+  `SimulatedSystemAudioSource` e `SimulatedApplicationAudioSource` reproduzem
+  PCM pelo mesmo pipeline de blocos para testes; não capturam áudio real.
 - Diarização, reconhecimento de fala do próprio usuário e detecção automática
   confiável de resposta/resolução em todos os casos.
 - Adapters comerciais OpenAI/Anthropic/Gemini: contrato e router existem; o fluxo

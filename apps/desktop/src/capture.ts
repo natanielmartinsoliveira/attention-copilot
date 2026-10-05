@@ -9,6 +9,46 @@ export interface ApplicationAudioSource extends AudioSource {
   kind: "application";
   processId: number;
 }
+export type BlockHandler = (
+  samples: Float32Array,
+  start: number,
+  end: number,
+) => void;
+/** Groups small PCM frames into ~3 s blocks stamped with wall-clock ms. */
+export class PcmBlocker {
+  private chunks: Float32Array[] = [];
+  private count = 0;
+  constructor(
+    private onBlock: BlockHandler,
+    private cursor: number,
+    private rate = 16000,
+    private blockSamples = rate * 3,
+  ) {}
+  push(frame: Float32Array) {
+    this.chunks.push(frame);
+    this.count += frame.length;
+    if (this.count >= this.blockSamples) this.flush();
+  }
+  /** Emits whatever is buffered, even if shorter than a block. */
+  flush() {
+    if (!this.count) return;
+    const all = new Float32Array(this.count);
+    let offset = 0;
+    for (const c of this.chunks) {
+      all.set(c, offset);
+      offset += c.length;
+    }
+    this.clear();
+    const start = this.cursor,
+      end = start + (all.length * 1000) / this.rate;
+    this.cursor = end;
+    this.onBlock(all, start, end);
+  }
+  clear() {
+    this.chunks = [];
+    this.count = 0;
+  }
+}
 export function wav(samples: Float32Array, rate: number) {
   const b = new ArrayBuffer(44 + samples.length * 2),
     v = new DataView(b);
@@ -39,9 +79,7 @@ export class BrowserTabAudioSource implements AudioSource {
   abort?: AbortController;
   stopped = false;
   busy = false;
-  chunks: Float32Array[] = [];
-  count = 0;
-  cursor = 0;
+  blocker?: PcmBlocker;
   constructor(
     public meetingId: string,
     private token: string,
@@ -85,25 +123,12 @@ export class BrowserTabAudioSource implements AudioSource {
     const mute = this.ctx.createGain();
     mute.gain.value = 0;
     this.node.connect(mute).connect(this.ctx.destination);
-    this.cursor = Date.now();
+    const blocker = (this.blocker = new PcmBlocker(
+      (samples, start, end) => void this.process(samples, start, end),
+      Date.now(),
+    ));
     this.node.port.onmessage = (ev: MessageEvent<Float32Array>) => {
-      if (this.stopped) return;
-      this.chunks.push(ev.data);
-      this.count += ev.data.length;
-      if (this.count >= 48000) {
-        const all = new Float32Array(this.count);
-        let offset = 0;
-        for (const c of this.chunks) {
-          all.set(c, offset);
-          offset += c.length;
-        }
-        this.chunks = [];
-        this.count = 0;
-        const start = this.cursor,
-          end = start + all.length / 16;
-        this.cursor = end;
-        void this.process(all, start, end);
-      }
+      if (!this.stopped) blocker.push(ev.data);
     };
     for (const t of this.stream.getTracks())
       t.onended = () => {
@@ -153,7 +178,6 @@ export class BrowserTabAudioSource implements AudioSource {
     for (const t of this.stream?.getTracks() ?? []) t.stop();
     this.node?.disconnect();
     await this.ctx?.close();
-    this.chunks = [];
-    this.count = 0;
+    this.blocker?.clear();
   }
 }

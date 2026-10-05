@@ -6,9 +6,14 @@ import type {
   AttentionEvent,
   Meeting,
 } from "../../../packages/core/src/types";
-import { isOpen } from "../../../packages/core/src/engine";
+import { alertChannel, isOpen } from "../../../packages/core/src/engine";
 import { BrowserTabAudioSource } from "./capture";
-import { enableNotifications, miniWindow, notify } from "./notify";
+import {
+  enableNotifications,
+  miniWindow,
+  notify,
+  playSoftTone,
+} from "./notify";
 import "./style.css";
 const backend = "__TAURI_INTERNALS__" in window ? "http://127.0.0.1:4317" : "";
 const time = (n: number) =>
@@ -36,7 +41,8 @@ function App() {
     } | null>(null),
     [config, setConfig] = useState(""),
     [notifs, setNotifs] = useState(false),
-    [audioIds, setAudioIds] = useState<string[]>([]);
+    [audioIds, setAudioIds] = useState<string[]>([]),
+    [toast, setToast] = useState<{ id: string; text: string } | null>(null);
   const socket = useRef<Socket | null>(null),
     notified = useRef(new Set<string>()),
     sources = useRef(new Map<string, BrowserTabAudioSource>()),
@@ -92,16 +98,29 @@ function App() {
     });
     s.on("state", (data: AppState) => {
       setState(data);
+      // §17: BADGE is only counted in the header; DISCREET shows an in-app
+      // toast once per event; DESKTOP/URGENT once per engine notification.
       for (const m of data.meetings)
         for (const e of m.events) {
-          if (!e.notifiedAt || !isOpen(e)) continue;
+          const channel = alertChannel(e);
+          if (channel === "DISCREET") {
+            const key = e.id + ":discreet";
+            if (notified.current.has(key)) continue;
+            notified.current.add(key);
+            setToast({ id: e.id, text: `${m.title} · ${e.reason}` });
+            continue;
+          }
+          if (channel !== "DESKTOP" && channel !== "URGENT") continue;
           const key = e.id + ":" + e.notifiedAt;
           if (notified.current.has(key)) continue;
           notified.current.add(key);
           if (notifEnabled.current)
-            void notify(`Attention Copilot · ${m.platform}`, e.reason).catch(
-              () => {},
-            );
+            void notify(
+              `${channel === "URGENT" ? "🔴 " : ""}Attention Copilot · ${m.platform}`,
+              `${e.reason}\n“${e.quote}”`,
+            ).catch(() => {});
+          if (channel === "URGENT" && data.settings.urgentSound)
+            void playSoftTone().catch(() => {});
         }
     });
     return () => {
@@ -115,6 +134,11 @@ function App() {
     },
     [],
   );
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(null), 6000);
+    return () => clearTimeout(timer);
+  }, [toast]);
   const stopAudio = async () => {
     await Promise.all([...sources.current.values()].map((s) => s.stop()));
     sources.current.clear();
@@ -247,7 +271,17 @@ function App() {
     .flatMap((m) => m.events.map((e) => ({ ...e, title: m.title })))
     .sort((a, b) => b.updatedAt - a.updatedAt);
   const recommendation = state.recommendation,
-    target = state.meetings.find((m) => m.id === recommendation.meetingId);
+    // Snapshots saved before `state` existed only carry switchAttention.
+    mode =
+      recommendation.state ??
+      (recommendation.switchAttention ? "SWITCH" : "CALM"),
+    target = state.meetings.find((m) => m.id === recommendation.meetingId),
+    recommendedEvent = events.find((e) => e.id === recommendation.eventId),
+    unseen = events.filter(
+      (e) =>
+        alertChannel(e) !== "NONE" &&
+        (e.status === "DETECTED" || e.status === "NOTIFIED"),
+    ).length;
   return (
     <div className={compact ? "app compact" : "app"}>
       <header>
@@ -257,6 +291,15 @@ function App() {
           <span className="version">LOCAL · v0.1</span>
         </div>
         <nav>
+          {unseen > 0 && (
+            <span
+              className="badge"
+              aria-label={`${unseen} eventos não vistos`}
+              title="Eventos ainda não vistos"
+            >
+              {unseen}
+            </span>
+          )}
           <span className={connected ? "connection" : "error"}>
             {connected ? "● Conectado" : "● Desconectado"}
           </span>
@@ -303,34 +346,61 @@ function App() {
       )}
       <section
         className={
-          recommendation.switchAttention
+          mode === "SWITCH"
             ? "recommendation urgent"
-            : "recommendation"
+            : mode === "POSSIBLE"
+              ? "recommendation possible"
+              : "recommendation"
         }
+        role="status"
       >
-        <span className="radar">
-          {recommendation.switchAttention ? "!" : "✓"}
+        <span className="radar" aria-hidden="true">
+          {mode === "SWITCH" ? "!" : mode === "POSSIBLE" ? "?" : "✓"}
         </span>
         <div>
           <span className="eyebrow">RECOMENDAÇÃO ATUAL</span>
           <h2>
-            {recommendation.switchAttention
+            {mode === "SWITCH"
               ? `Mude sua atenção para ${target?.title}`
-              : "Você pode continuar focado."}
+              : mode === "POSSIBLE"
+                ? "Possível pergunta ou pedido para você."
+                : "Tudo tranquilo. Você pode continuar focado."}
           </h2>
-          <p>{recommendation.reason}</p>
-          {recommendation.switchAttention && (
+          {mode !== "CALM" && <p>{recommendation.reason}</p>}
+          {mode !== "CALM" && (
             <span className="muted">
               Confiança estimada: {Math.round(recommendation.confidence * 100)}%
             </span>
           )}
         </div>
-        {recommendation.switchAttention && target && (
+        {mode !== "CALM" && recommendedEvent && (
+          <button onClick={() => context(recommendedEvent)}>
+            Ver contexto
+          </button>
+        )}
+        {mode === "SWITCH" && target && (
           <button onClick={() => action(() => api("focus", { id: target.id }))}>
             Marcar foco aqui
           </button>
         )}
       </section>
+      {toast && (
+        <div className="toast" role="status">
+          <span>{toast.text}</span>
+          <button
+            onClick={() => {
+              const e = events.find((x) => x.id === toast.id);
+              setToast(null);
+              if (e) void context(e);
+            }}
+          >
+            Ver
+          </button>
+          <button aria-label="Fechar aviso" onClick={() => setToast(null)}>
+            ×
+          </button>
+        </div>
+      )}
       {!compact && (
         <div className="toolbar">
           <div>
@@ -377,6 +447,20 @@ function App() {
               }
             >
               {notifs ? "✓ Alertas desktop" : "Ativar alertas desktop"}
+            </button>
+            <button
+              aria-pressed={!!state.settings.urgentSound}
+              onClick={() =>
+                action(async () => {
+                  const urgentSound = !state.settings.urgentSound;
+                  await api("settings", { ...state.settings, urgentSound });
+                  if (urgentSound) await playSoftTone();
+                })
+              }
+            >
+              {state.settings.urgentSound
+                ? "✓ Som suave em urgentes"
+                : "Som em urgentes"}
             </button>
             <button
               onClick={() => {
@@ -574,7 +658,8 @@ function App() {
             <div className="section-head">
               <h2>Central de atenção</h2>
               <span className="muted">
-                {events.filter(isOpen).length} eventos abertos · som desligado
+                {events.filter(isOpen).length} eventos abertos · som em urgentes{" "}
+                {state.settings.urgentSound ? "ligado" : "desligado"}
               </span>
             </div>
             {!events.length ? (
@@ -585,7 +670,7 @@ function App() {
             ) : (
               events.map((e) => (
                 <div
-                  className={`event ${!isOpen(e) ? "resolved" : ""}`}
+                  className={`event ${!isOpen(e) ? "resolved" : ""} ${alertChannel(e) === "URGENT" ? "urgent-event" : ""}`}
                   key={e.id}
                 >
                   <div className="event-score">{e.score}</div>

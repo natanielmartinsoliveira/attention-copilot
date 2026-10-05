@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   AttentionEngine,
   MeetingPriorityEngine,
+  alertChannel,
   level,
 } from "../../packages/core/src/engine";
 import {
@@ -120,6 +121,54 @@ describe("Portuguese regression dataset", () => {
       engine.detect(seg("Nataniel, consegue verificar?"), [], defaultProfile, settings)
         .score,
     ).toBe(78);
+  });
+  it("uncertain request elsewhere yields POSSIBLE, not SWITCH", () => {
+    const focus = { ...make(), id: "focus" },
+      other = make(),
+      s = seg("Nataniel, consegue verificar o endpoint agora?");
+    s.confidence = 0.61;
+    engine.ingest(other, s, defaultProfile, defaultSettings, now, "e");
+    const r = new MeetingPriorityEngine().recommend([focus, other], "focus");
+    expect(r.switchAttention).toBe(false);
+    expect(r.state).toBe("POSSIBLE");
+    expect(r.eventId).toBe("e");
+    expect(r.confidence).toBe(0.61);
+    expect(r.meetingId).toBe("focus");
+  });
+  it("calm when nothing relevant happens outside focus", () => {
+    const focus = { ...make(), id: "focus" },
+      other = make();
+    engine.ingest(other, seg("Nataniel, bom dia."), defaultProfile, defaultSettings, now, "e");
+    const r = new MeetingPriorityEngine().recommend([focus, other], "focus");
+    expect(r.state).toBe("CALM");
+    expect(r.eventId).toBeUndefined();
+  });
+  it("confident request elsewhere yields SWITCH", () => {
+    const focus = { ...make(), id: "focus" },
+      other = make();
+    engine.ingest(other, seg("Nataniel, consegue verificar o endpoint?"), defaultProfile, defaultSettings, now, "e");
+    const r = new MeetingPriorityEngine().recommend([focus, other], "focus");
+    expect(r.state).toBe("SWITCH");
+    expect(r.eventId).toBe("e");
+  });
+  it("alert channel follows level and notification decision", () => {
+    const m = make();
+    engine.ingest(m, seg("Obrigado Nataniel."), defaultProfile, defaultSettings, now, "low");
+    engine.ingest(m, seg("Alguém sabe como funciona React?", now + 1), defaultProfile, defaultSettings, now + 1, "medium");
+    const unsure = seg("Nataniel, consegue verificar o endpoint?", now + 2);
+    unsure.confidence = 0.6;
+    const byId = (id: string) => m.events.find((e) => e.id === id)!;
+    expect(alertChannel(byId("low"))).toBe("BADGE");
+    expect(alertChannel(byId("medium"))).toBe("DISCREET");
+    const high = make(), urgent = make(), quiet = make();
+    engine.ingest(high, seg("Nataniel, consegue verificar o endpoint?"), defaultProfile, defaultSettings, now, "h");
+    engine.ingest(urgent, seg("Nataniel, sem isso não conseguimos fazer o deploy"), defaultProfile, defaultSettings, now, "u");
+    engine.ingest(quiet, unsure, defaultProfile, defaultSettings, now, "q");
+    expect(alertChannel(high.events[0])).toBe("DESKTOP");
+    expect(alertChannel(urgent.events[0])).toBe("URGENT");
+    expect(alertChannel(quiet.events[0])).toBe("DISCREET");
+    high.events[0].status = "RESPONDED";
+    expect(alertChannel(high.events[0])).toBe("NONE");
   });
   it("aliases work", () =>
     expect(detect("Nathan, você consegue verificar?").types).toContain(

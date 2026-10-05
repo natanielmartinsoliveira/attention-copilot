@@ -67,6 +67,7 @@ export class State {
       recommendation: {
         meetingId: "frontend",
         switchAttention: false,
+        state: "CALM",
         reason: "Tudo tranquilo. Você pode continuar focado.",
         confidence: 0.8,
       },
