@@ -16,6 +16,8 @@ Socket.IO exige `{auth:{token}}` e emite `state` após cada mudança/reconexão.
 | POST   | /api/interaction           | {id: meetingId} evidência de foco em AUTO              |
 | POST   | /api/profile               | UserProfile validado                                   |
 | POST   | /api/settings              | minAttentionDelta, cooldownMs, retentionHours, weights, urgentSound?, externalAI? |
+| GET    | /api/weights/suggestions   | Sugestões de peso a partir do feedback, com motivo     |
+| POST   | /api/weights/apply         | {types: EventType[]} aplica só as sugestões escolhidas |
 | POST   | /api/meetings              | {title, platform} retorna id                           |
 | POST   | /api/capture/start         | {} autoriza ingestão real nesta sessão                 |
 | POST   | /api/transcript            | TranscriptSegment, somente captura real ativa          |

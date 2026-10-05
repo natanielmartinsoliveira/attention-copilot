@@ -25,6 +25,11 @@ import {
   timeline,
 } from "../../../packages/core/src/assistant.js";
 import type { AIService } from "./ai-service.js";
+import {
+  leadType,
+  suggestWeights,
+  type FeedbackRating,
+} from "../../../packages/core/src/learning.js";
 export class State {
   engine = new AttentionEngine();
   priority = new MeetingPriorityEngine();
@@ -76,6 +81,7 @@ export class State {
         reason: "Tudo tranquilo. Você pode continuar focado.",
         confidence: 0.8,
       },
+      feedbackLog: [],
     };
   }
   meeting(id: string) {
@@ -133,10 +139,13 @@ export class State {
   reset() {
     this.stop();
     const profile = this.data.profile,
-      settings = this.data.settings;
+      settings = this.data.settings,
+      { feedbackLog, weightsAppliedAt } = this.data;
     this.data = this.fresh();
     this.data.profile = profile;
     this.data.settings = settings;
+    this.data.feedbackLog = feedbackLog;
+    this.data.weightsAppliedAt = weightsAppliedAt;
     this.emit();
   }
   startDemo(publish?: (s: TranscriptSegment) => Promise<void>) {
@@ -240,6 +249,8 @@ export class State {
       throw Error("Transição inválida");
     e.status = status;
     e.updatedAt = Date.now();
+    if (status === "DISMISSED" || status === "RESPONDED")
+      this.signal(e, status === "DISMISSED" ? "dismissed" : "responded");
     this.engine.refresh(m, this.data.settings, Date.now());
     this.emit();
   }
@@ -248,8 +259,43 @@ export class State {
     rating: "useful" | "unimportant" | "false-positive",
     reason: string,
   ) {
-    this.event(id).e.feedback = { rating, reason };
+    const { e } = this.event(id);
+    e.feedback = { rating, reason };
+    this.signal(e, rating, true);
     this.emit();
+  }
+  /** Explicit ratings replace earlier explicit ratings of the same event. */
+  private signal(e: AttentionEvent, rating: FeedbackRating, explicit = false) {
+    const log = (this.data.feedbackLog ??= []);
+    if (explicit) {
+      const i = log.findIndex(
+        (s) => s.eventId === e.id && !["dismissed", "responded"].includes(s.rating),
+      );
+      if (i >= 0) log.splice(i, 1);
+    }
+    log.push({ eventId: e.id, type: leadType(e.types), rating, at: Date.now() });
+    if (log.length > 1000) log.splice(0, log.length - 1000);
+  }
+  weightSuggestions() {
+    return suggestWeights(
+      this.data.feedbackLog ?? [],
+      this.data.settings.weights,
+      Date.now(),
+      this.data.weightsAppliedAt,
+    );
+  }
+  /** Applies only the suggestions the user picked; their signals are spent. */
+  applyWeights(types: EventType[]) {
+    const weights = { ...this.data.settings.weights },
+      now = Date.now();
+    this.data.weightsAppliedAt ??= {};
+    for (const s of this.weightSuggestions())
+      if (types.includes(s.type)) {
+        weights[s.type] = s.suggested;
+        this.data.weightsAppliedAt[s.type] = now;
+      }
+    this.settings({ weights });
+    return weights;
   }
   catchUp(id: string, ultra: boolean) {
     return catchUp(

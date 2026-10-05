@@ -151,13 +151,24 @@ await dialog.getByRole("button", { name: "Confirmar", exact: true }).first().cli
 await dialog.locator(".task.confirmed").first().waitFor();
 await page.getByRole("button", { name: "Fechar", exact: true }).click();
 await page.getByRole("button", { name: "Configurar", exact: true }).click();
-const config = JSON.parse(
-  await page.getByLabel("Configuração do perfil").inputValue(),
-);
-config.profile.name = "Teste";
-await page.getByLabel("Configuração do perfil").fill(JSON.stringify(config));
+// §9: profile edited through form fields, no JSON.
+await page.getByLabel("Nome", { exact: true }).fill("Teste");
+await page.getByRole("button", { name: "Adicionar projeto", exact: true }).click();
+await page.getByLabel("Projeto 1", { exact: true }).fill("Pagamentos");
+await page.getByLabel("Importância de projeto 1", { exact: true }).fill("90");
 await page.getByRole("button", { name: "Salvar", exact: true }).click();
 await page.getByRole("dialog").waitFor({ state: "hidden" });
+{
+  const saved = await (
+    await fetch(`${base}/api/state`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+  ).json();
+  assert.equal(saved.profile.name, "Teste");
+  assert.deepEqual(saved.profile.projects, [
+    { name: "Pagamentos", importance: 90 },
+  ]);
+}
 await page.getByRole("button", { name: "Mini modo", exact: true }).click();
 assert.equal(await page.locator(".app.compact").count(), 1);
 await page.getByRole("button", { name: "Expandir", exact: true }).click();

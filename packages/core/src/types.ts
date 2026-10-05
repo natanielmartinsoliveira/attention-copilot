@@ -1,3 +1,4 @@
+import type { FeedbackSignal } from "./learning.js";
 export const EVENT_TYPES = [
   "NONE",
   "MENTION",
@@ -167,6 +168,10 @@ export interface AppState {
   running: boolean;
   demo: boolean;
   recommendation: Recommendation;
+  /** Durable feedback (§50/§51); outlives transcript retention. Capped. */
+  feedbackLog: FeedbackSignal[];
+  /** Per type, when a weight suggestion was applied (older signals are spent). */
+  weightsAppliedAt?: Partial<Record<EventType, number>>;
 }
 export interface Detection {
   types: EventType[];

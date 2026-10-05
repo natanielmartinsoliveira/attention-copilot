@@ -12,6 +12,7 @@ import type {
 } from "../../../packages/core/src/types";
 import { alertChannel, isOpen } from "../../../packages/core/src/engine";
 import { BrowserTabAudioSource } from "./capture";
+import { SettingsForm } from "./settings-form";
 import {
   enableNotifications,
   miniWindow,
@@ -103,7 +104,6 @@ function App() {
       kind?: string;
       id?: string;
     } | null>(null),
-    [config, setConfig] = useState(""),
     [notifs, setNotifs] = useState(false),
     [audioIds, setAudioIds] = useState<string[]>([]),
     [toast, setToast] = useState<{ id: string; text: string } | null>(null),
@@ -272,6 +272,24 @@ function App() {
         id: m.id,
       }),
     );
+  /** Fresh profile/settings from the API so applied suggestions show at once. */
+  const openSettings = () =>
+    action(async () => {
+      const [fresh, suggestions] = await Promise.all([
+        api("state"),
+        api("weights/suggestions"),
+      ]);
+      setModal({
+        title: "Perfil e preferências",
+        kind: "settings",
+        data: {
+          profile: fresh.profile,
+          settings: fresh.settings,
+          suggestions,
+          version: Date.now(),
+        },
+      });
+    });
   const showTimeline = (m: Meeting) =>
     action(async () =>
       setModal({
@@ -599,20 +617,7 @@ function App() {
               {externalAI ? "✓ IA externa" : "IA externa"}
             </button>
             <button
-              onClick={() => {
-                setConfig(
-                  JSON.stringify(
-                    { profile: state.profile, settings: state.settings },
-                    null,
-                    2,
-                  ),
-                );
-                setModal({
-                  title: "Perfil e preferências",
-                  data: null,
-                  kind: "settings",
-                });
-              }}
+              onClick={() => openSettings()}
             >
               Configurar
             </button>
@@ -927,31 +932,25 @@ function App() {
               <button onClick={() => setModal(null)}>Fechar</button>
             </div>
             {modal.kind === "settings" ? (
-              <>
-                <p>
-                  Edite nome, apelidos, experiência, projetos, pessoas, pesos e
-                  limites. Importância: 0–100; pesos: 0–2.
-                </p>
-                <textarea
-                  aria-label="Configuração do perfil"
-                  className="config"
-                  value={config}
-                  onChange={(e) => setConfig(e.target.value)}
-                />
-                <button
-                  className="primary"
-                  onClick={() =>
-                    action(async () => {
-                      const c = JSON.parse(config);
-                      await api("profile", c.profile);
-                      await api("settings", c.settings);
-                      setModal(null);
-                    })
-                  }
-                >
-                  Salvar
-                </button>
-              </>
+              <SettingsForm
+                key={modal.data.version}
+                profile={modal.data.profile}
+                settings={modal.data.settings}
+                suggestions={modal.data.suggestions}
+                onSave={(profile, settings) =>
+                  action(async () => {
+                    await api("profile", profile);
+                    await api("settings", settings);
+                    setModal(null);
+                  })
+                }
+                onApply={(types) =>
+                  action(async () => {
+                    await api("weights/apply", { types });
+                    await openSettings();
+                  })
+                }
+              />
             ) : modal.kind === "response" ? (
               <>
                 <p>{modal.data.reason}</p>

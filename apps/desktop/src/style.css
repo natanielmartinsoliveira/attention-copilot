@@ -632,3 +632,64 @@ details summary {
   color: #8797ad;
   margin: 10px 0;
 }
+/* §9 profile form and §51 suggestions */
+.settings-form {
+  display: grid;
+  gap: 14px;
+}
+.settings-form fieldset {
+  border: 1px solid #2b394d;
+  border-radius: 8px;
+  padding: 12px 14px;
+  display: grid;
+  gap: 10px;
+}
+.settings-form legend {
+  padding: 0 6px;
+  color: #8797ad;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+}
+.field {
+  display: grid;
+  grid-template-columns: minmax(120px, 220px) 1fr;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+.field input,
+.ranked-row input {
+  width: 100%;
+  min-width: 0;
+  background: #0f1621;
+  border: 1px solid #344255;
+  border-radius: 6px;
+  color: inherit;
+  padding: 7px 9px;
+}
+.ranked-row {
+  display: grid;
+  grid-template-columns: 1fr 90px auto;
+  gap: 8px;
+}
+.weights {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 8px;
+  margin-top: 8px;
+}
+.suggestions {
+  border-color: #6b6233 !important;
+}
+.suggestion {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+@media (max-width: 600px) {
+  .field {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+}

@@ -103,7 +103,7 @@ export class AttentionEngine {
       !/\?|consegue|precisa|responsavel/.test(t)
     )
       return none(
-        25,
+        Math.round(25 * settings.weights.MENTION),
         ["MENTION"],
         "Menção casual. Nenhuma resposta necessária.",
       );

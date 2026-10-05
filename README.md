@@ -41,7 +41,11 @@ Para desenvolver: `npm run dev`. Verificação: `npm run check`, `npm test`.
 - Catch-up do período fora do foco em tópicos, com duração e AÇÃO sugerida;
   "Essencial" lista só decisão, tarefa, pergunta, bloqueio, prazo e divergência.
 - Respostas conservadoras editáveis; nenhuma execução/envio de resposta.
-- Perfil, projetos, pessoas, expertise e pesos editáveis em formulário JSON.
+- Perfil, projetos, pessoas, expertise, limites e pesos editáveis em formulário.
+- Feedback vira sugestão de peso (§51): "Útil", "Respondido", "Ignorar", "Não
+  era importante" e "Falso positivo" contam para o tipo principal do alerta; com
+  3+ sinais em 30 dias aparece a sugestão com o motivo, aplicada só com clique.
+  Sinais já usados não são contados de novo; o registro sobrevive à retenção.
 - Feedback, exclusão de reunião/transcrição, retenção.
 - Resumo final extrativo: tópicos, decisões explícitas, tarefas com responsável,
   prazo e confiança (Confirmar/Editar/Ignorar), perguntas, follow-ups e linha do

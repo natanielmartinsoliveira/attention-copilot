@@ -126,6 +126,11 @@ assert.equal(
   true,
 );
 await request(`events/${event.id}/feedback`, { rating: "useful" });
+assert.ok(Array.isArray((await request("weights/suggestions")).data));
+assert.equal(
+  (await request("weights/apply", { types: ["NOT_A_TYPE"] })).status,
+  400,
+);
 await request(`events/${event.id}/status`, { status: "RESPONDED" });
 assert.equal(
   (await request("state")).data.meetings.find((m) => m.id === "backend")

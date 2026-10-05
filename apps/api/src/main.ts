@@ -109,6 +109,8 @@ class Api {
               ? "external-refinement"
               : "local-heuristic",
           });
+        if (path === "weights/suggestions")
+          return res.json(state.weightSuggestions());
         if (path === "ai/usage")
           return res.json({
             ...ai.summary(),
@@ -175,6 +177,18 @@ class Api {
             ),
           });
           return res.json({ ok: true });
+        }
+        if (path === "weights/apply") {
+          const types = strings(b.types);
+          if (
+            !types.every((t) =>
+              EVENT_TYPES.includes(t as (typeof EVENT_TYPES)[number]),
+            )
+          )
+            throw Error("Tipo desconhecido");
+          return res.json(
+            state.applyWeights(types as (typeof EVENT_TYPES)[number][]),
+          );
         }
         if (path === "meetings") {
           return res.json({ id: state.create(str(b.title), str(b.platform)) });
