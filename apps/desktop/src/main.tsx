@@ -109,7 +109,13 @@ function App() {
     [toast, setToast] = useState<{ id: string; text: string } | null>(null),
     [editing, setEditing] = useState<{ id: string; text: string } | null>(
       null,
-    );
+    ),
+    [aiStatus, setAiStatus] = useState<{
+      configured: boolean;
+      providers: { cheap: string[]; strong: string[] };
+      calls: number;
+      cost: number;
+    } | null>(null);
   const socket = useRef<Socket | null>(null),
     notified = useRef(new Set<string>()),
     sources = useRef(new Map<string, BrowserTabAudioSource>()),
@@ -201,6 +207,18 @@ function App() {
     },
     [],
   );
+  const externalAI = !!state?.settings.externalAI;
+  useEffect(() => {
+    if (!token || !state) return;
+    const load = () =>
+      void api("ai/usage")
+        .then(setAiStatus)
+        .catch(() => {});
+    load();
+    if (!externalAI) return;
+    const timer = setInterval(load, 15000);
+    return () => clearInterval(timer);
+  }, [token, !!state, externalAI]);
   useEffect(() => {
     if (!toast) return;
     const timer = setTimeout(() => setToast(null), 6000);
@@ -554,6 +572,33 @@ function App() {
                 : "Som em urgentes"}
             </button>
             <button
+              aria-pressed={externalAI}
+              disabled={!aiStatus?.configured}
+              title={
+                aiStatus?.configured
+                  ? "Refina eventos incertos, rascunhos e resumos com IA externa"
+                  : "Nenhuma chave de IA configurada no .env"
+              }
+              onClick={() =>
+                action(async () => {
+                  const turnOn = !externalAI;
+                  if (
+                    turnOn &&
+                    !window.confirm(
+                      "Ligar IA externa envia trechos da transcrição (e seu perfil) para os providers configurados: " +
+                        [...(aiStatus?.providers.cheap ?? []), ...(aiStatus?.providers.strong ?? [])].join(", ") +
+                        ". Confirme que isso é permitido pelas políticas da sua organização.",
+                    )
+                  )
+                    return;
+                  await api("settings", { ...state.settings, externalAI: turnOn });
+                  setAiStatus(await api("ai/usage"));
+                })
+              }
+            >
+              {externalAI ? "✓ IA externa" : "IA externa"}
+            </button>
+            <button
               onClick={() => {
                 setConfig(
                   JSON.stringify(
@@ -779,6 +824,8 @@ function App() {
                     <small>
                       {e.repeats} trechos relacionados ·{" "}
                       {Math.round(e.confidence * 100)}% de confiança estimada
+                      {e.ai &&
+                        ` · refinado por IA (${e.ai.provider}); regras locais davam ${e.ai.original.score}`}
                     </small>
                     <div className="event-actions">
                       <button onClick={() => context(e)}>Ver contexto</button>
@@ -850,8 +897,19 @@ function App() {
             )}
           </section>
           <footer>
-            Processamento local por regras contextuais · sem envio automático de
-            respostas · sem armazenamento de áudio
+            {state.settings.externalAI && aiStatus?.configured ? (
+              <>
+                IA externa ligada · barato:{" "}
+                {aiStatus.providers.cheap.join(" → ") || "nenhum"} · forte:{" "}
+                {aiStatus.providers.strong.join(" → ") || "nenhum"} ·{" "}
+                {count(aiStatus.calls, "chamada", "chamadas")}
+                {aiStatus.cost > 0 &&
+                  ` · US$ ${aiStatus.cost.toFixed(4)} (custo conhecido)`}
+              </>
+            ) : (
+              "Processamento local por regras contextuais"
+            )}{" "}
+            · sem envio automático de respostas · sem armazenamento de áudio
           </footer>
         </>
       )}
@@ -897,6 +955,13 @@ function App() {
             ) : modal.kind === "response" ? (
               <>
                 <p>{modal.data.reason}</p>
+                <p className="muted">
+                  Origem:{" "}
+                  {modal.data.source === "local"
+                    ? "rascunhos locais conservadores"
+                    : modal.data.source}
+                  . Revise antes de copiar; nada é enviado automaticamente.
+                </p>
                 {modal.data.safe &&
                   [
                     ["Curta", "short"],
@@ -1083,6 +1148,45 @@ function App() {
                   )}
                   empty="Nenhuma pergunta para você."
                 />
+                {state.settings.externalAI && aiStatus?.configured && (
+                  <>
+                    <h3>Rascunho da IA</h3>
+                    {modal.data.ai ? (
+                      <>
+                        <p className="muted">
+                          Gerado por {modal.data.ai.source}. Revise: pode conter
+                          erros.
+                        </p>
+                        <Bullets items={modal.data.ai.summary} empty="Sem tópicos." />
+                        <Bullets
+                          items={modal.data.ai.tasks.map(
+                            (t: any) =>
+                              `Tarefa: ${t.text} · ${t.owner}${t.deadline ? ` · ${t.deadline}` : ""}`,
+                          )}
+                          empty="Nenhuma tarefa sugerida pela IA."
+                        />
+                      </>
+                    ) : (
+                      <button
+                        onClick={() =>
+                          action(async () => {
+                            const result = await api(
+                              `meetings/${modal.id}/ai-summary`,
+                              {},
+                            );
+                            setModal((current) =>
+                              current
+                                ? { ...current, data: { ...current.data, ai: result } }
+                                : current,
+                            );
+                          })
+                        }
+                      >
+                        Gerar resumo com IA
+                      </button>
+                    )}
+                  </>
+                )}
                 <h3>Possíveis follow-ups</h3>
                 <Bullets items={modal.data.followUps} empty="Nenhum." />
                 <p className="muted">

@@ -79,6 +79,25 @@ Em volume existente, aplique migrations com `psql` e controle a tabela
 `schema_migration`. Não apague volumes para atualizar o esquema.
 Credenciais Compose são exclusivas de desenvolvimento local.
 
+## IA externa (opcional)
+
+O produto funciona sem IA paga. Com chaves no `.env` (veja `.env.example`;
+`npm start` e `npm run dev` carregam o arquivo), o botão **IA externa** fica
+disponível. Ele vem desligado; ao ligar, a interface pede confirmação porque
+trechos da transcrição e o perfil passam a sair da máquina.
+
+- Rota: as regras locais decidem se algo é relevante. Só eventos incertos ou de
+  prioridade média vão ao modelo barato (Groq → Gemini); confiança baixa sobe ao
+  modelo forte (Anthropic → Gemini pro → OpenRouter). Todos falhando, as regras
+  locais continuam. Limite de 10 chamadas por minuto por reunião.
+- A IA nunca cria alerta sozinha, pode baixar prioridade livremente, mas só
+  subir até +15 e nunca acima da confiança da transcrição.
+- Transcrição vai delimitada como dado não confiável; respostas são validadas
+  por schema; rascunhos que prometem prazo ou disponibilidade são rejeitados.
+- Rascunhos de resposta e "Gerar resumo com IA" (resumo final) usam o modelo
+  forte primeiro. O rodapé mostra providers, chamadas e custo conhecido;
+  `GET /api/ai/usage` traz tokens, latência e falhas, sem conteúdo.
+
 ## Áudio real experimental (Chrome/Edge)
 
 Use a interface web em localhost. Configure **o mesmo ATTENTION_TOKEN** no Node
@@ -132,8 +151,8 @@ Captura de abas usa a interface web, não o WebView do Tauri.
   PCM pelo mesmo pipeline de blocos para testes; não capturam áudio real.
 - Diarização, reconhecimento de fala do próprio usuário e detecção automática
   confiável de resposta/resolução em todos os casos.
-- Adapters comerciais OpenAI/Anthropic/Gemini: contrato e router existem; o fluxo
-  executado é local. Não há chamada paga nem métricas fictícias de tokens/custo.
+- Custo estimado de Groq/Gemini (sem tabela de preço embutida; configure
+  `*_PRICE_IN/OUT`), persistência de uso de IA no PostgreSQL e painel de custo.
 - Resumo abstrativo (reescrita por LLM), decisões inferidas e tarefas externas.
 - Inferência de foco por janela ativa: AUTO usa interação explícita na interface.
 - Auth por conta do SO, armazenamento em keychain, encryption-at-rest, instalador,

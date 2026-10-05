@@ -73,6 +73,18 @@ export interface AttentionEvent extends AttentionDecision {
     rating: "useful" | "unimportant" | "false-positive";
     reason: string;
   };
+  /** Set when an external model re-scored this event; keeps the heuristic values. */
+  ai?: {
+    provider: string;
+    model: string;
+    refinedAt: number;
+    original: {
+      score: number;
+      confidence: number;
+      types: EventType[];
+      requiresResponse: boolean;
+    };
+  };
 }
 export interface Meeting {
   id: string;
@@ -130,6 +142,8 @@ export interface Settings {
   weights: Record<EventType, number>;
   /** Soft tone for URGENT alerts; off by default. */
   urgentSound: boolean;
+  /** Sends transcript excerpts to configured AI providers; off by default (§44). */
+  externalAI: boolean;
 }
 /** CALM 🟢 · POSSIBLE 🟡 (relevant but not certain enough to switch) · SWITCH 🔴 */
 export type RecommendationState = "CALM" | "POSSIBLE" | "SWITCH";
@@ -184,4 +198,5 @@ export const defaultSettings: Settings = {
     number
   >,
   urgentSound: false,
+  externalAI: false,
 };

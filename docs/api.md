@@ -7,14 +7,15 @@ Socket.IO exige `{auth:{token}}` e emite `state` após cada mudança/reconexão.
 | Método | Rota                       | Entrada/resultado                                      |
 | ------ | -------------------------- | ------------------------------------------------------ |
 | GET    | /api/state                 | AppState completo                                      |
-| GET    | /api/health                | modo, status                                           |
+| GET    | /api/health                | modo, status, ai (local-heuristic ou external-refinement) |
+| GET    | /api/ai/usage              | providers, chamadas, tokens, custo, falhas; sem conteúdo |
 | POST   | /api/demo/start            | {} inicia nova sessão demo                             |
 | POST   | /api/stop                  | {} interrompe ingestão/demo                            |
 | POST   | /api/reset                 | {} reinicia reuniões demo e mantém configuração        |
 | POST   | /api/focus                 | {id: meetingId ou null para AUTO}                      |
 | POST   | /api/interaction           | {id: meetingId} evidência de foco em AUTO              |
 | POST   | /api/profile               | UserProfile validado                                   |
-| POST   | /api/settings              | minAttentionDelta, cooldownMs, retentionHours, weights, urgentSound? |
+| POST   | /api/settings              | minAttentionDelta, cooldownMs, retentionHours, weights, urgentSound?, externalAI? |
 | POST   | /api/meetings              | {title, platform} retorna id                           |
 | POST   | /api/capture/start         | {} autoriza ingestão real nesta sessão                 |
 | POST   | /api/transcript            | TranscriptSegment, somente captura real ativa          |
@@ -26,6 +27,7 @@ Socket.IO exige `{auth:{token}}` e emite `state` após cada mudança/reconexão.
 | POST   | /api/meetings/:id/end      | {} resumo extrativo e encerramento                     |
 | GET    | /api/meetings/:id/summary  | Resumo: tópicos, decisões, tarefas, perguntas, follow-ups, timeline |
 | GET    | /api/meetings/:id/timeline | Linha do tempo da reunião                              |
+| POST   | /api/meetings/:id/ai-summary | {} resumo e tarefas sugeridos pela IA (exige IA externa ligada) |
 | POST   | /api/meetings/:id/tasks/:taskId | {status?: PROPOSED, CONFIRMED, DISMISSED; text?} |
 | POST   | /api/meetings/:id/clear    | {} apaga transcript e eventos                          |
 | DELETE | /api/meetings/:id          | Remove reunião e seus dados                            |

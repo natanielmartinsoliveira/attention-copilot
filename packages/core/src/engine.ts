@@ -397,6 +397,17 @@ export class AttentionEngine {
     this.refresh(meeting, settings, now);
     return e;
   }
+  /** Re-derives level, flags and notification after an external re-score. */
+  rescore(m: Meeting, e: AttentionEvent, s: Settings, now: number) {
+    e.level = level(e.score);
+    e.requiresImmediateAttention = e.score >= 81 && e.confidence >= 0.8;
+    if (this.shouldNotify(e, s, now)) {
+      e.status = "NOTIFIED";
+      e.notifiedAt = now;
+      e.notifiedScore = e.score;
+    }
+    this.refresh(m, s, now);
+  }
   shouldNotify(e: AttentionEvent, s: Settings, now: number) {
     return (
       isOpen(e) &&

@@ -9,7 +9,9 @@ import {
   defaultSettings,
   type ActionItemStatus,
   type AppState,
+  type AttentionEvent,
   type EventStatus,
+  type Meeting,
   type TranscriptSegment,
   type UserProfile,
   type Settings,
@@ -22,13 +24,14 @@ import {
   summarizeMeeting,
   timeline,
 } from "../../../packages/core/src/assistant.js";
+import type { AIService } from "./ai-service.js";
 export class State {
   engine = new AttentionEngine();
   priority = new MeetingPriorityEngine();
   listeners = new Set<() => void>();
   timers: Set<ReturnType<typeof setTimeout>> = new Set();
   data: AppState;
-  constructor() {
+  constructor(readonly ai?: AIService) {
     this.data = this.fresh();
   }
   fresh(): AppState {
@@ -166,7 +169,7 @@ export class State {
   ingest(s: TranscriptSegment) {
     const m = this.meeting(s.meetingId);
     if (m.status !== "ACTIVE") throw Error("Reunião não está ativa");
-    this.engine.ingest(
+    const e = this.engine.ingest(
       m,
       s,
       this.data.profile,
@@ -175,6 +178,38 @@ export class State {
       randomUUID(),
     );
     this.emit();
+    if (e) this.refining = this.refine(m, e, s.confidence);
+  }
+  /** Latest background refinement; tests await it. */
+  refining: Promise<void> = Promise.resolve();
+  private async refine(m: Meeting, e: AttentionEvent, sttConfidence: number) {
+    if (!this.ai || !this.data.settings.externalAI || !this.ai.shouldRefine(e))
+      return;
+    try {
+      if (!(await this.ai.refine(m, e, this.data.profile, sttConfidence))) return;
+      this.engine.rescore(m, e, this.data.settings, Date.now());
+      this.emit();
+    } catch {
+      // Router already logged the failure; heuristics stay in charge.
+    }
+  }
+  /** Drafts from the configured model when allowed, else the local templates. */
+  async responseFor(id: string) {
+    const { m, e } = this.event(id);
+    const local = generateResponse(m, e);
+    if (!local.safe || !this.ai || !this.data.settings.externalAI)
+      return { ...local, source: "local" };
+    const draft = await this.ai.response(m, e, this.data.profile);
+    return draft
+      ? { ...draft, sourceSegmentIds: local.sourceSegmentIds }
+      : { ...local, source: "local (IA indisponível)" };
+  }
+  async aiSummary(id: string) {
+    if (!this.ai || !this.data.settings.externalAI)
+      throw Error("IA externa desligada");
+    const result = await this.ai.summarize(this.meeting(id), this.data.profile);
+    if (!result) throw Error("Nenhum provider de IA respondeu");
+    return result;
   }
   focus(id: string | null, mode: AppState["focusMode"] = id ? "MANUAL" : "AUTO") {
     const now = Date.now(),

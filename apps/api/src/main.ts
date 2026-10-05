@@ -8,6 +8,8 @@ import type { Request, Response } from "express";
 import { Server } from "socket.io";
 import { State } from "./state.js";
 import { Infrastructure } from "./infrastructure.js";
+import { AIService } from "./ai-service.js";
+import { routerFromEnv } from "./providers.js";
 import {
   EVENT_TYPES,
   type ActionItemStatus,
@@ -15,7 +17,8 @@ import {
   type UserProfile,
   type TranscriptSegment,
 } from "../../../packages/core/src/types.js";
-const state = new State(),
+const ai = new AIService((report) => routerFromEnv(process.env, report));
+const state = new State(ai),
   token = process.env.ATTENTION_TOKEN || randomBytes(24).toString("hex");
 const port = Number(process.env.PORT || 4317);
 const allowed = new Set([
@@ -102,7 +105,14 @@ class Api {
             ok: true,
             mode: infra ? "infra" : "memory",
             capture: "explicit-browser-only",
-            ai: "local-heuristic",
+            ai: state.data.settings.externalAI && ai.router.configured
+              ? "external-refinement"
+              : "local-heuristic",
+          });
+        if (path === "ai/usage")
+          return res.json({
+            ...ai.summary(),
+            enabled: !!state.data.settings.externalAI,
           });
         const c = path.match(/^events\/([^/]+)\/context$/);
         if (c) return res.json(state.context(c[1]));
@@ -159,6 +169,10 @@ class Api {
               b.urgentSound,
               state.data.settings.urgentSound ?? false,
             ),
+            externalAI: bool(
+              b.externalAI,
+              state.data.settings.externalAI ?? false,
+            ),
           });
           return res.json({ ok: true });
         }
@@ -182,7 +196,8 @@ class Api {
         }
         const e = path.match(/^events\/([^/]+)\/(status|response|feedback)$/);
         if (e) {
-          if (e[2] === "response") return res.json(state.response(e[1]));
+          if (e[2] === "response")
+            return res.json(await state.responseFor(e[1]));
           if (e[2] === "feedback") {
             if (!["useful", "unimportant", "false-positive"].includes(b.rating))
               throw Error("Feedback inválido");
@@ -205,6 +220,8 @@ class Api {
               text: b.text === undefined ? undefined : str(b.text, 300),
             }),
           );
+        const s = path.match(/^meetings\/([^/]+)\/ai-summary$/);
+        if (s) return res.json(await state.aiSummary(s[1]));
         const m = path.match(/^meetings\/([^/]+)\/(catch-up|end|clear)$/);
         if (m) {
           if (m[2] === "catch-up")

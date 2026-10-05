@@ -11,16 +11,17 @@
     "node": ">=22"
   },
   "scripts": {
-    "dev": "npm run build:api && concurrently -k \"node dist/apps/api/src/main.js\" \"vite --config apps/desktop/vite.config.ts\"",
+    "dev": "npm run build:api && concurrently -k \"node --env-file-if-exists=.env dist/apps/api/src/main.js\" \"vite --config apps/desktop/vite.config.ts\"",
     "build:api": "tsc -p tsconfig.api.json",
     "build": "npm run build:api && vite build --config apps/desktop/vite.config.ts",
-    "start": "node dist/apps/api/src/main.js",
+    "start": "node --env-file-if-exists=.env dist/apps/api/src/main.js",
     "test": "vitest run",
     "check": "tsc --noEmit -p apps/desktop/tsconfig.json && npm run build:api",
     "desktop": "cd apps/desktop && tauri dev",
     "test:integration": "node tests/integration/api.mjs"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.131.0",
     "@nestjs/common": "^11.1.0",
     "@nestjs/core": "^11.1.0",
     "@nestjs/platform-express": "^11.1.0",
