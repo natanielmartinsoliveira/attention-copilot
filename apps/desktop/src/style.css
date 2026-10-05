@@ -1,0 +1,527 @@
+:root {
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  color: #e9edf5;
+  background: #0b1018;
+  font-synthesis: none;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+}
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+button {
+  cursor: pointer;
+  background: #1b2534;
+  border: 1px solid #344255;
+  border-radius: 8px;
+  padding: 9px 13px;
+  color: #e5ecf7;
+  font-size: 13px;
+}
+button:hover {
+  background: #2b3b51;
+}
+button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+input,
+textarea,
+select {
+  background: #111a27;
+  border: 1px solid #344255;
+  color: #e9edf5;
+  border-radius: 8px;
+  padding: 10px;
+}
+input:focus,
+textarea:focus {
+  outline: 2px solid #81d8cc;
+}
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+h1 {
+  font-size: 32px;
+  letter-spacing: -1px;
+}
+h2 {
+  font-size: 19px;
+}
+h3 {
+  font-size: 15px;
+}
+p {
+  line-height: 1.6;
+  color: #a8b6ca;
+}
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 22px 0;
+  border-bottom: 1px solid #253142;
+}
+header > div,
+nav {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.logo {
+  font-size: 30px;
+  color: #81d8cc;
+}
+.version {
+  font-size: 11px;
+  color: #73839b;
+  letter-spacing: 1px;
+}
+.app {
+  max-width: 1400px;
+  margin: auto;
+  padding: 0 34px 26px;
+}
+.intro {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 32px 0;
+}
+.eyebrow {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.6px;
+  color: #899bb3;
+}
+.intro h1 {
+  margin: 9px 0;
+}
+.capture-state {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-size: 11px;
+}
+.live,
+.connection {
+  color: #81d8cc;
+}
+.connection {
+  font-size: 11px;
+}
+.muted {
+  color: #8797ad;
+  font-size: 12px;
+}
+.stop {
+  color: #ffa89a;
+  border-color: #70463f;
+  background: #302120;
+}
+.recommendation {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 24px;
+  background: #10241f;
+  border: 1px solid #2a5145;
+  border-radius: 12px;
+}
+.recommendation h2 {
+  margin: 7px 0;
+}
+.recommendation > button {
+  margin-left: auto;
+}
+.urgent {
+  background: #2d201e;
+  border-color: #765047;
+}
+.radar {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #467164;
+  border-radius: 50%;
+  font-size: 24px;
+  color: #81d8cc;
+}
+.urgent .radar {
+  color: #ffb490;
+  border-color: #c5785a;
+}
+.toolbar {
+  display: flex;
+  justify-content: space-between;
+  margin: 24px 0;
+  gap: 10px;
+}
+.toolbar > div,
+.card-actions,
+.bottom-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.primary {
+  background: #81d8cc;
+  border-color: #81d8cc;
+  color: #10241f;
+  font-weight: 700;
+}
+.primary:hover {
+  background: #abeee5;
+}
+.selected {
+  border-color: #81d8cc;
+}
+.meetings {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+.meeting {
+  background: #121c29;
+  border: 1px solid #2b3a4d;
+  border-radius: 12px;
+  padding: 22px;
+}
+.meeting.focused {
+  border-color: #5c9f96;
+}
+.meeting-head {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 10px;
+}
+.meeting h2 {
+  margin-top: 8px;
+}
+.status {
+  font-size: 9px;
+  background: #1e2b3b;
+  color: #b9cce5;
+  border-radius: 5px;
+  padding: 6px;
+  white-space: nowrap;
+}
+.score {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 22px 0 14px;
+}
+.score strong {
+  font-size: 58px;
+  font-weight: 600;
+  letter-spacing: -3px;
+  color: #81d8cc;
+}
+.score span {
+  font-size: 10px;
+  color: #94a9c0;
+  line-height: 1.8;
+}
+.danger .score strong {
+  color: #ffb490;
+}
+.meter {
+  height: 4px;
+  background: #283547;
+  border-radius: 4px;
+}
+.meter span {
+  height: 100%;
+  display: block;
+  background: #81d8cc;
+  border-radius: 4px;
+  transition: width 0.3s;
+}
+.danger .meter span {
+  background: #ffb490;
+}
+.card-actions {
+  margin: 20px 0;
+}
+.transcript-head {
+  display: flex;
+  justify-content: space-between;
+  border-top: 1px solid #29374a;
+  padding: 16px 0;
+  font-size: 10px;
+  color: #8da0b9;
+  letter-spacing: 1px;
+}
+.transcript {
+  height: 246px;
+  overflow: auto;
+  scrollbar-width: thin;
+}
+.segment {
+  padding: 12px 10px;
+  border-left: 2px solid transparent;
+  margin-bottom: 10px;
+}
+.segment > div {
+  display: flex;
+  justify-content: space-between;
+}
+.segment strong {
+  font-size: 12px;
+}
+.segment time {
+  font-size: 10px;
+  color: #71849f;
+}
+.segment p {
+  font-size: 13px;
+  margin-top: 5px;
+}
+.segment.relevant {
+  background: #2e2526;
+  border-left-color: #d29777;
+  border-radius: 4px;
+}
+.empty {
+  font-size: 13px;
+  padding: 15px 0;
+  color: #6f839e;
+}
+.bottom-actions {
+  margin-top: 16px;
+}
+.bottom-actions button {
+  font-size: 11px;
+}
+.search-row {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+  margin: 22px 0;
+}
+.search-row > input {
+  width: 320px;
+}
+.search-row label {
+  font-size: 12px;
+  color: #95a9c2;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 20px 0;
+}
+.event {
+  display: flex;
+  gap: 18px;
+  background: #151f2c;
+  border: 1px solid #2b394d;
+  border-radius: 10px;
+  margin: 10px 0;
+  padding: 20px;
+}
+.event-score {
+  font-size: 26px;
+  color: #ffb490;
+}
+.event-body {
+  flex: 1;
+}
+.event h3 {
+  margin: 8px 0;
+}
+.event p {
+  font-size: 13px;
+}
+.event small {
+  font-size: 11px;
+  color: #758ba7;
+}
+.event-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+.event-actions button,
+.event-actions select {
+  font-size: 11px;
+}
+.resolved {
+  opacity: 0.55;
+}
+.error-banner {
+  background: #3c2026;
+  color: #ffb0b8;
+  padding: 12px;
+  margin: 14px 0;
+  border-radius: 8px;
+  display: flex;
+  justify-content: space-between;
+}
+.error {
+  color: #ffb0b8;
+}
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: #000b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 25px;
+  z-index: 5;
+}
+.modal {
+  background: #131d2a;
+  border: 1px solid #3b4c64;
+  max-width: 800px;
+  width: 100%;
+  max-height: 85vh;
+  overflow: auto;
+  border-radius: 12px;
+  padding: 24px;
+}
+.modal .section-head {
+  margin-top: 0;
+}
+.modal p {
+  margin: 12px 0;
+}
+.modal textarea {
+  width: 100%;
+  min-height: 100px;
+  margin: 12px 0;
+  line-height: 1.6;
+}
+.modal textarea.config {
+  height: 400px;
+  font-family: monospace;
+  font-size: 12px;
+}
+.modal li {
+  margin: 12px 0;
+  color: #bac8db;
+  line-height: 1.5;
+}
+.compact {
+  padding: 0 15px;
+}
+.compact header {
+  padding: 10px 0;
+}
+.compact header strong {
+  font-size: 13px;
+}
+.compact .version,
+.compact .connection {
+  display: none;
+}
+.compact .recommendation {
+  padding: 12px;
+  margin: 10px 0;
+  gap: 10px;
+}
+.compact h2 {
+  font-size: 12px;
+}
+.compact .recommendation p,
+.compact .eyebrow,
+.compact .status,
+.compact .meeting-head h2,
+.compact .recommendation > button,
+.compact .radar {
+  display: none;
+}
+.compact .meeting {
+  padding: 10px;
+}
+.compact .score {
+  margin: 0;
+}
+.compact .score strong {
+  font-size: 30px;
+}
+.compact .score span {
+  font-size: 8px;
+}
+.compact .stop {
+  margin-top: 8px;
+}
+footer {
+  margin-top: 32px;
+  color: #61758f;
+  font-size: 11px;
+}
+.login {
+  max-width: 700px;
+  margin: 12vh auto;
+  padding: 30px;
+}
+.login h1 {
+  font-size: 48px;
+  margin: 24px 0;
+}
+.login form {
+  display: flex;
+  gap: 12px;
+  margin: 24px 0;
+}
+.login input {
+  flex: 1;
+}
+@media (max-width: 850px) {
+  .app {
+    padding: 0 16px 20px;
+  }
+  .intro,
+  .toolbar {
+    align-items: start;
+    flex-direction: column;
+    gap: 15px;
+  }
+  .meetings {
+    grid-template-columns: 1fr;
+  }
+  .version {
+    display: none;
+  }
+  header {
+    gap: 10px;
+  }
+  nav {
+    gap: 6px;
+  }
+  h1 {
+    font-size: 25px;
+  }
+  .recommendation {
+    padding: 16px;
+  }
+  .search-row {
+    flex-wrap: wrap;
+  }
+  .login h1 {
+    font-size: 32px;
+  }
+  .login form {
+    flex-direction: column;
+  }
+}

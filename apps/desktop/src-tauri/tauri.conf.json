@@ -1,0 +1,30 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Attention Copilot",
+  "version": "0.1.0",
+  "identifier": "com.attentioncopilot.desktop",
+  "build": {
+    "beforeDevCommand": "npm --prefix ../.. run dev",
+    "devUrl": "http://127.0.0.1:5173",
+    "beforeBuildCommand": "npm --prefix ../.. run build",
+    "frontendDist": "../../../dist-ui"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Attention Copilot",
+        "width": 1280,
+        "height": 840,
+        "minWidth": 400,
+        "minHeight": 240
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; connect-src 'self' http://127.0.0.1:4317 ws://127.0.0.1:4317 http://127.0.0.1:5173 ws://127.0.0.1:5173; style-src 'self' 'unsafe-inline'; img-src 'self' data:"
+    }
+  },
+  "bundle": {
+    "active": false
+  }
+}
