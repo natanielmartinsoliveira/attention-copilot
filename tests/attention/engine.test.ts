@@ -175,7 +175,96 @@ describe("Portuguese regression dataset", () => {
       "DIRECT_QUESTION",
     ));
 });
+describe("spec examples §7 / §8", () => {
+  const types = (text: string, ctx: string[] = [], profile = defaultProfile) =>
+    engine.detect(
+      seg(text),
+      ctx.map((x) => seg(x, now - 1000)),
+      profile,
+      defaultSettings,
+    ).types;
+  it("statement that the user achieved something is not a request", () => {
+    for (const text of [
+      "Nataniel conseguiu resolver o bug.",
+      "Nataniel conseguiu entregar ontem?",
+    ]) {
+      const d = detect(text);
+      expect(d.requiresResponse, text).toBe(false);
+      expect(d.types, text).not.toContain("FOLLOW_UP");
+    }
+  });
+  it("chasing without a question mark still counts as follow-up", () =>
+    expect(detect("Nataniel, alguma novidade sobre o endpoint").types).toContain(
+      "FOLLOW_UP",
+    ));
+  it("§7 opinion request is a direct question", () =>
+    expect(types("Nataniel, qual é sua opinião?")).toContain("DIRECT_QUESTION"));
+  it("§7 production question requires a decision", () =>
+    expect(types("Nataniel, podemos colocar isso em produção?")).toContain(
+      "DECISION_REQUIRED",
+    ));
+  it("§7 'ficou responsável' is a user responsibility", () =>
+    expect(types("Nataniel ficou responsável pelo endpoint.")).toContain(
+      "USER_RESPONSIBILITY",
+    ));
+  it("§7 'precisa entregar hoje' is deadline + responsibility", () => {
+    const t = types("Nataniel precisa entregar isso hoje.");
+    expect(t).toContain("DEADLINE");
+    expect(t).toContain("USER_RESPONSIBILITY");
+  });
+  it("§8 'quem pode verificar' with ownership context is a HIGH indirect question", () => {
+    const d = engine.detect(
+      seg("Quem pode verificar esse endpoint?"),
+      [seg("Nataniel trabalha nessa parte.", now - 1000)],
+      defaultProfile,
+      defaultSettings,
+    );
+    expect(d.types).toContain("INDIRECT_QUESTION");
+    expect(level(d.score)).toBe("HIGH");
+  });
+  it("§8 seeking someone with the user's expertise is MEDIUM/HIGH, not URGENT", () => {
+    const profile = {
+      ...defaultProfile,
+      expertise: [...defaultProfile.expertise, "autenticação"],
+    };
+    const d = engine.detect(
+      seg("Precisamos de alguém que conheça o fluxo de autenticação."),
+      [],
+      profile,
+      defaultSettings,
+    );
+    expect(d.types).toContain("USER_EXPERTISE_REQUIRED");
+    expect(["MEDIUM", "HIGH"]).toContain(level(d.score));
+  });
+});
 describe("lifecycle and fatigue", () => {
+  it("§14 unanswered follow-ups group into one escalating event", () => {
+    const m = make(),
+      steps = [
+        "Nataniel, você consegue revisar isso?",
+        "Nataniel, conseguiu verificar?",
+        "Nataniel, precisamos da resposta para continuar.",
+      ],
+      scores: number[] = [];
+    steps.forEach((text, i) => {
+      const t = now + i * 300000;
+      engine.ingest(m, seg(text, t), defaultProfile, defaultSettings, t, "e" + i);
+      scores.push(m.attentionScore);
+    });
+    expect(m.events).toHaveLength(1);
+    expect(m.events[0].repeats).toBe(3);
+    expect(scores[1]).toBeGreaterThan(scores[0]);
+    expect(scores[2]).toBeGreaterThan(scores[1]);
+    expect(scores[2]).toBeGreaterThanOrEqual(95);
+    expect(m.events[0].types).toContain("FOLLOW_UP");
+  });
+  it("unrelated request minutes later is a separate event", () => {
+    const m = make();
+    engine.ingest(m, seg("Nataniel, consegue verificar o endpoint?"), defaultProfile, defaultSettings, now, "a");
+    const t = now + 300000;
+    engine.ingest(m, seg("Nataniel, pode revisar o layout do frontend?", t), defaultProfile, defaultSettings, t, "b");
+    expect(m.events).toHaveLength(2);
+  });
   it("five repeated questions create one event and one notification under cooldown", () => {
     const m = make();
     for (let i = 0; i < 5; i++)

@@ -52,6 +52,14 @@ const topicOf = (t: string) =>
               .filter((w) => w.length > 4)
               .slice(-3)
               .join(" ") || "general";
+/** Unanswered requests escalate, informational ones fade; e.score keeps the
+ * detected value so notification thresholds stay stable. */
+export function effectiveScore(e: AttentionEvent, now: number) {
+  const age = Math.floor((now - e.updatedAt) / 60000);
+  return e.requiresResponse
+    ? Math.min(100, e.score + Math.min(12, age * 2))
+    : Math.max(0, e.score - age * 5);
+}
 export class AttentionEngine {
   detect(
     segment: TranscriptSegment,
@@ -100,7 +108,7 @@ export class AttentionEngine {
         "Menção casual. Nenhuma resposta necessária.",
       );
     const question =
-      /\?|\b(consegue|pode verificar|qual.*opiniao|quem pode|alguem sabe|podemos|confirma|conseguiu)\b/.test(
+      /\?|\b(consegue|pode verificar|qual.*opiniao|quem pode|alguem sabe|podemos|confirma)\b/.test(
         t,
       );
     const historical =
@@ -111,6 +119,18 @@ export class AttentionEngine {
       /\b(responsavel|ficou com|atribu|vai cuidar|precisa entregar)\b/.test(t);
     const waiting =
       /\b(esperar|aguardando|esperando|precisamos da resposta|sem.*resposta)\b/.test(
+        t,
+      );
+    // Chasing an earlier request ("conseguiu?", "alguma novidade?"). A bare
+    // "Nataniel conseguiu…" is a statement, so it needs "?" or a chasing cue.
+    const nudge =
+      named &&
+      !historical &&
+      (/\b(alguma novidade|e ai)\b|ja (?:conseguiu|viu|olhou)/.test(t) ||
+        (/\bconseguiu\b/.test(t) && t.includes("?")));
+    // Looking for someone with a skill, phrased without a question mark.
+    const seeking =
+      /alguem que (?:conhec|saib|entend|domin)|precisamos de alguem|quem (?:conhece|sabe|entende)/.test(
         t,
       );
     const priorRelevant = recent.filter(
@@ -150,15 +170,15 @@ export class AttentionEngine {
       add("INDIRECT_QUESTION", 67);
       requiresResponse = true;
       confidence = 0.72;
-    } else if (expertise && question) {
+    } else if (expertise && (question || seeking)) {
       add("USER_EXPERTISE_REQUIRED", 52);
       confidence = 0.6;
     }
     if (named && assignment) {
-      add(
-        historical ? "USER_RESPONSIBILITY" : "TASK_ASSIGNED",
-        historical ? 35 : 76,
-      );
+      // A current assignment is both a responsibility and a task (§7, §28);
+      // a past one is context only.
+      add("USER_RESPONSIBILITY", historical ? 35 : 76);
+      if (!historical) add("TASK_ASSIGNED", 76);
       requiresResponse = !historical;
     }
     if (relevant && /podemos.*(?:producao|deploy)|decidir|decisao/.test(t)) {
@@ -173,7 +193,7 @@ export class AttentionEngine {
       add("CONFIRMATION_REQUIRED", 78);
       requiresResponse = true;
     }
-    if (relevant && waiting) {
+    if ((relevant && waiting) || nudge) {
       add("FOLLOW_UP", 80);
       requiresResponse = true;
     }
@@ -218,6 +238,7 @@ export class AttentionEngine {
       DIRECT_QUESTION: "Pergunta direta para você",
       INDIRECT_QUESTION: "Pergunta ligada à sua responsabilidade no contexto",
       TASK_ASSIGNED: "Tarefa atribuída a você",
+      USER_RESPONSIBILITY: "Você foi citado como responsável",
       DEADLINE: "Prazo mencionado",
       BLOCKER: "O avanço depende desta resposta",
       FOLLOW_UP: "Aguardam sua resposta",
@@ -234,7 +255,11 @@ export class AttentionEngine {
       confidence,
       requiresResponse,
       reason: types
-        .filter((x) => x !== "MENTION" || types.length === 1)
+        .filter(
+          (x) =>
+            (x !== "MENTION" || types.length === 1) &&
+            (x !== "USER_RESPONSIBILITY" || !types.includes("TASK_ASSIGNED")),
+        )
         .map((x) => labels[x] ?? x)
         .join(" + "),
       topic: ongoing ? topicOf(c) : topicOf(t),
@@ -271,12 +296,15 @@ export class AttentionEngine {
       this.refresh(meeting, settings, now);
       return;
     }
+    // A follow-up chases an older request, so it may join any open event
+    // still alive; other relations only hold within the 120 s context window.
+    const window = d.types.includes("FOLLOW_UP") ? settings.expireMs : 120000;
     const related = [...meeting.events]
       .reverse()
       .find(
         (e) =>
           isOpen(e) &&
-          now - e.updatedAt <= 120000 &&
+          now - e.updatedAt < window &&
           (e.topic === d.topic ||
             (d.requiresResponse &&
               (d.types.includes("DEADLINE") ||
@@ -286,14 +314,21 @@ export class AttentionEngine {
     let e: AttentionEvent;
     if (related && d.requiresResponse) {
       e = related;
+      // Start from the escalated score so a repeat never lowers priority,
+      // then bump: chasing (+5) weighs more than re-asking (+3).
+      const escalated = effectiveScore(e, now);
       e.types = [...new Set([...e.types, ...d.types])];
       e.segmentIds.push(segment.id);
       e.updatedAt = now;
       e.repeats++;
       e.score = Math.min(
         100,
-        Math.max(d.score, e.score) +
-          (d.types.includes("DIRECT_QUESTION") ? 3 : 0),
+        Math.max(d.score, escalated) +
+          (d.types.includes("FOLLOW_UP")
+            ? 5
+            : d.types.includes("DIRECT_QUESTION")
+              ? 3
+              : 0),
       );
       e.reason = [...new Set([e.reason, d.reason])].join("; ");
       e.requiresResponse = true;
@@ -344,12 +379,7 @@ export class AttentionEngine {
         e.status = "EXPIRED";
         continue;
       }
-      // Unanswered requests escalate, informational ones fade; e.score keeps
-      // the detected value so notification thresholds stay stable.
-      const age = Math.floor((now - e.updatedAt) / 60000);
-      const score = e.requiresResponse
-        ? Math.min(100, e.score + Math.min(12, age * 2))
-        : Math.max(0, e.score - age * 5);
+      const score = effectiveScore(e, now);
       e.level = level(score);
       e.requiresImmediateAttention = score >= 81 && e.confidence >= 0.8;
       scores.push(score);
