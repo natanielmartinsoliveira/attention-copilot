@@ -72,16 +72,26 @@ node --env-file=.env dist/apps/api/src/main.js
 ```
 
 No modo infra, transcrições da demo passam pela fila `meeting.transcript`;
-PostgreSQL persiste estado, perfil, reuniões, transcrições e eventos; Redis recebe
-estado de foco/scores com TTL. As sete filas e respectivas DLQs são declaradas.
-As demais filas reservam contratos para fases posteriores; não fingem ter
-workers ativos. Retry de transcrição é limitado a três republicações, com
-publisher confirms, ACK após persistência e deduplicação por segmento.
+PostgreSQL persiste estado, perfil, reuniões, transcrições, eventos, tarefas,
+sinais de feedback (`feedback_signal`) e cada chamada de IA (`ai_call`, sem
+conteúdo). Redis guarda estado de foco/scores e `lastUserAttentionAt` com TTL,
+e marca segmentos processados (24 h) para idempotência que sobrevive a
+reinícios. Retry de transcrição é limitado a três republicações, com publisher
+confirms, ACK após persistência e deduplicação por segmento.
 
-Migration `001_initial.sql` é aplicada na primeira inicialização do volume.
-Em volume existente, aplique migrations com `psql` e controle a tabela
-`schema_migration`. Não apague volumes para atualizar o esquema.
-Credenciais Compose são exclusivas de desenvolvimento local.
+`meeting.attention` recebe toda mudança de evento e `meeting.notification` as
+notificações (ids, score, nível, tipos, `correlationId`; sem texto da
+transcrição), para integrações. Sem consumidor ainda, cada mensagem expira em
+24 h. As demais filas reservam contratos para fases posteriores.
+
+A API aplica na inicialização as migrations de `infra/postgres` ainda ausentes
+em `schema_migration` (cada arquivo com sua transação). Não apague volumes para
+atualizar o esquema. Credenciais Compose são exclusivas de desenvolvimento local.
+
+Observabilidade: `GET /api/metrics` traz p50/p95 de latência de transcrição,
+detecção e notificação, eventos por minuto, chamadas/custo de IA e taxa de falso
+positivo. Logs JSON `attention_event` carregam `timestamp`, `meetingId`,
+`eventId` e `correlationId`, sem conteúdo.
 
 ## IA externa (opcional)
 

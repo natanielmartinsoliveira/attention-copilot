@@ -109,6 +109,7 @@ class Api {
               ? "external-refinement"
               : "local-heuristic",
           });
+        if (path === "metrics") return res.json(state.metricsSnapshot());
         if (path === "weights/suggestions")
           return res.json(state.weightSuggestions());
         if (path === "ai/usage")
@@ -273,7 +274,17 @@ async function main() {
     if (saved) {
       state.data = saved;
       state.data.running = false;
+      state.data.feedbackLog ??= [];
     }
+    const connected = infra;
+    state.onAttention = (e, change, correlationId) =>
+      connected.publishAttention(e, change, correlationId);
+    ai.onRecord = (u) =>
+      void connected.saveAICall(u).catch(() =>
+        console.error(
+          JSON.stringify({ timestamp: Date.now(), type: "ai_call_persist_failure" }),
+        ),
+      );
     await infra.consume((s) =>
       state.ingest(segment(s as unknown as Record<string, unknown>)),
     );

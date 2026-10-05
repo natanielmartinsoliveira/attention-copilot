@@ -25,6 +25,8 @@ import {
   timeline,
 } from "../../../packages/core/src/assistant.js";
 import type { AIService } from "./ai-service.js";
+import { Metrics } from "./metrics.js";
+export type AttentionChange = "detected" | "updated" | "notified" | "refined";
 import {
   leadType,
   suggestWeights,
@@ -178,16 +180,57 @@ export class State {
   ingest(s: TranscriptSegment) {
     const m = this.meeting(s.meetingId);
     if (m.status !== "ACTIVE") throw Error("Reunião não está ativa");
+    const received = Date.now(),
+      before = new Map(m.events.map((x) => [x.id, x.notifiedAt]));
+    const started = performance.now();
     const e = this.engine.ingest(
       m,
       s,
       this.data.profile,
       this.data.settings,
-      Date.now(),
+      received,
       randomUUID(),
     );
+    // Speech end → text here: STT plus transport (≈0 for the demo).
+    this.metrics.record("transcriptionLatency", received - s.endTime);
+    this.metrics.record("attentionDetectionLatency", performance.now() - started);
+    if (e) {
+      const created = !before.has(e.id),
+        notified = e.notifiedAt === received && before.get(e.id) !== received;
+      if (created) this.metrics.event(received);
+      if (notified) this.metrics.record("notificationLatency", received - s.endTime);
+      this.announce(e, s.id, notified ? "notified" : created ? "detected" : "updated");
+    }
     this.emit();
     if (e) this.refining = this.refine(m, e, s.confidence);
+  }
+  readonly metrics = new Metrics();
+  /** Integrations (RabbitMQ in infra mode) subscribe here; no transcript text. */
+  onAttention?: (event: AttentionEvent, kind: AttentionChange, correlationId: string) => void;
+  /** §49: every attention event logged with timestamp, ids and correlationId. */
+  private announce(e: AttentionEvent, correlationId: string, kind: AttentionChange) {
+    console.log(
+      JSON.stringify({
+        timestamp: Date.now(),
+        type: "attention_event",
+        change: kind,
+        meetingId: e.meetingId,
+        eventId: e.id,
+        correlationId,
+        score: e.score,
+        level: e.level,
+        status: e.status,
+        types: e.types,
+      }),
+    );
+    this.onAttention?.(e, kind, correlationId);
+  }
+  metricsSnapshot() {
+    const ai = this.ai?.summary();
+    return this.metrics.snapshot(
+      { calls: ai?.calls ?? 0, cost: ai?.cost ?? 0 },
+      this.data.feedbackLog ?? [],
+    );
   }
   /** Latest background refinement; tests await it. */
   refining: Promise<void> = Promise.resolve();
@@ -197,6 +240,7 @@ export class State {
     try {
       if (!(await this.ai.refine(m, e, this.data.profile, sttConfidence))) return;
       this.engine.rescore(m, e, this.data.settings, Date.now());
+      this.announce(e, e.segmentIds.at(-1) ?? e.id, "refined");
       this.emit();
     } catch {
       // Router already logged the failure; heuristics stay in charge.

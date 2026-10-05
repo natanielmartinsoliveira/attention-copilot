@@ -9,6 +9,7 @@ Socket.IO exige `{auth:{token}}` e emite `state` após cada mudança/reconexão.
 | GET    | /api/state                 | AppState completo                                      |
 | GET    | /api/health                | modo, status, ai (local-heuristic ou external-refinement) |
 | GET    | /api/ai/usage              | providers, chamadas, tokens, custo, falhas; sem conteúdo |
+| GET    | /api/metrics               | Latências p50/p95, eventos/min, IA, falso positivo      |
 | POST   | /api/demo/start            | {} inicia nova sessão demo                             |
 | POST   | /api/stop                  | {} interrompe ingestão/demo                            |
 | POST   | /api/reset                 | {} reinicia reuniões demo e mantém configuração        |

@@ -5,10 +5,14 @@ import amqp, {
   type ConfirmChannel,
   type ConsumeMessage,
 } from "amqplib";
+import { readdir, readFile } from "node:fs/promises";
+import { join, resolve } from "node:path";
 import type {
   AppState,
+  AttentionEvent,
   TranscriptSegment,
 } from "../../../packages/core/src/types.js";
+import type { AIUsage } from "../../../packages/core/src/ai.js";
 const queues = [
   "meeting.audio",
   "meeting.transcript",
@@ -27,6 +31,7 @@ export class Infrastructure {
   async connect() {
     this.pool = new Pool({ connectionString: process.env.DATABASE_URL });
     await this.pool.query("SELECT 1");
+    await this.migrate();
     this.redis = createClient({ url: process.env.REDIS_URL });
     this.redis.on("error", () =>
       console.error(
@@ -48,6 +53,22 @@ export class Infrastructure {
       });
     }
   }
+  /** Applies infra/postgres/NNN_*.sql files not yet in schema_migration. Each
+   * file owns its transaction and its schema_migration row. */
+  async migrate(dir = process.env.MIGRATIONS_DIR ?? resolve("infra/postgres")) {
+    const files = (await readdir(dir)).filter((f) => /^\d{3}_.+\.sql$/.test(f)).sort();
+    const applied = new Set<number>();
+    const table = await this.pool!.query("SELECT to_regclass('schema_migration') AS t");
+    if (table.rows[0].t)
+      for (const r of (await this.pool!.query("SELECT version FROM schema_migration")).rows)
+        applied.add(Number(r.version));
+    for (const file of files) {
+      const version = Number(file.slice(0, 3));
+      if (applied.has(version)) continue;
+      await this.pool!.query(await readFile(join(dir, file), "utf8"));
+      console.log(JSON.stringify({ timestamp: Date.now(), type: "migration_applied", version }));
+    }
+  }
   async load(): Promise<AppState | undefined> {
     const result = await this.pool!.query(
       "SELECT data FROM app_snapshot WHERE id=1",
@@ -57,7 +78,67 @@ export class Infrastructure {
   /** Rows already in PostgreSQL: segment ids, and event id → row signature. */
   private savedSegments = new Set<string>();
   private savedEvents = new Map<string, string>();
+  private savedTasks = new Map<string, string>();
+  private savedSignals = new Set<string>();
   private synced = false;
+  /** §40: every AI call, success or failure, without content. */
+  async saveAICall(u: AIUsage) {
+    await this.pool!.query(
+      `INSERT INTO ai_call(at,provider,model,task,tier,meeting_id,event_id,input_tokens,output_tokens,latency_ms,estimated_cost,ok,error)
+       VALUES(to_timestamp($1/1000.0),$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+      [
+        u.timestamp,
+        u.provider,
+        u.model,
+        u.task,
+        u.tier,
+        u.meetingId,
+        u.eventId ?? null,
+        u.inputTokens,
+        u.outputTokens,
+        Math.round(u.latency),
+        u.estimatedCost,
+        u.ok,
+        u.error ?? null,
+      ],
+    );
+  }
+  /**
+   * Integration feed: meeting.attention gets every change, meeting.notification
+   * only notifications. No transcript text leaves in these messages. A 24 h
+   * per-message TTL bounds queues nobody consumes yet (queue arguments cannot
+   * change on existing queues, per-message expiration can).
+   */
+  publishAttention(e: AttentionEvent, change: string, correlationId: string) {
+    const body = Buffer.from(
+      JSON.stringify({
+        eventId: e.id,
+        meetingId: e.meetingId,
+        change,
+        score: e.score,
+        level: e.level,
+        status: e.status,
+        types: e.types,
+        requiresResponse: e.requiresResponse,
+        confidence: e.confidence,
+        notifiedAt: e.notifiedAt ?? null,
+        updatedAt: e.updatedAt,
+      }),
+    );
+    const options = {
+      persistent: true,
+      messageId: `${e.id}:${change}:${e.updatedAt}`,
+      correlationId,
+      expiration: "86400000",
+      contentType: "application/json",
+    };
+    const failed = (err: unknown) =>
+      err &&
+      console.error(JSON.stringify({ timestamp: Date.now(), type: "publish_failure", eventId: e.id }));
+    this.channel!.sendToQueue("meeting.attention", body, options, failed);
+    if (change === "notified")
+      this.channel!.sendToQueue("meeting.notification", body, options, failed);
+  }
   private latest?: AppState;
   private queued?: Promise<void>;
   /** Coalesces bursts: at most one write runs and one waits, always with the newest state. */
@@ -91,6 +172,14 @@ export class Infrastructure {
       goneEvents = [...this.savedEvents.keys()].filter(
         (id) => !currentEvents.has(id),
       );
+    // §35 tasks (small, upserted on change) and §50 feedback (append-only audit).
+    const tasks = snapshot.meetings.flatMap((m) => m.tasks ?? []),
+      taskSignature = (t: (typeof tasks)[number]) => JSON.stringify([t.status, t.text, t.deadline]),
+      changedTasks = tasks.filter((t) => this.savedTasks.get(t.id) !== taskSignature(t)),
+      currentTasks = new Set(tasks.map((t) => t.id)),
+      goneTasks = [...this.savedTasks.keys()].filter((id) => !currentTasks.has(id)),
+      signalId = (f: AppState["feedbackLog"][number]) => `${f.eventId}:${f.rating}:${f.at}`,
+      newSignals = (snapshot.feedbackLog ?? []).filter((f) => !this.savedSignals.has(signalId(f)));
     const client = await this.pool!.connect();
     try {
       await client.query("BEGIN");
@@ -152,6 +241,23 @@ export class Infrastructure {
            ON CONFLICT(id) DO UPDATE SET score=excluded.score,status=excluded.status,data=excluded.data`,
           [JSON.stringify(changedEvents)],
         );
+      if (goneTasks.length)
+        await client.query("DELETE FROM task WHERE id = ANY($1::text[])", [goneTasks]);
+      if (changedTasks.length)
+        await client.query(
+          `INSERT INTO task(id,meeting_id,data)
+           SELECT x->>'id',x->>'meetingId',x FROM jsonb_array_elements($1::jsonb) x
+           ON CONFLICT(id) DO UPDATE SET data=excluded.data`,
+          [JSON.stringify(changedTasks)],
+        );
+      if (newSignals.length)
+        await client.query(
+          `INSERT INTO feedback_signal(id,event_id,event_type,rating,at)
+           SELECT x->>'id',x->>'eventId',x->>'type',x->>'rating',to_timestamp((x->>'at')::bigint/1000.0)
+           FROM jsonb_array_elements($1::jsonb) x
+           ON CONFLICT(id) DO NOTHING`,
+          [JSON.stringify(newSignals.map((f) => ({ ...f, id: signalId(f) })))],
+        );
       await client.query("COMMIT");
     } catch (err) {
       await client.query("ROLLBACK").catch(() => {});
@@ -165,14 +271,20 @@ export class Infrastructure {
     for (const id of goneEvents) this.savedEvents.delete(id);
     for (const s of newSegments) this.savedSegments.add(s.id);
     for (const e of changedEvents) this.savedEvents.set(e.id, eventSignature(e));
+    for (const id of goneTasks) this.savedTasks.delete(id);
+    for (const t of changedTasks) this.savedTasks.set(t.id, taskSignature(t));
+    for (const f of newSignals) this.savedSignals.add(signalId(f));
     // Redis is a TTL cache; its failure must not roll back or redeliver transcripts.
     await this.redis!.set(
       "attention:state",
       JSON.stringify({
         focusId: snapshot.focusId,
-        scores: snapshot.meetings.map((m) => ({
+        focusMode: snapshot.focusMode,
+        meetings: snapshot.meetings.map((m) => ({
           id: m.id,
           score: m.attentionScore,
+          lastUserAttentionAt: m.lastUserAttentionAt,
+          lastRelevantEventAt: m.lastRelevantEventAt ?? null,
         })),
       }),
       { EX: 3600 },
@@ -214,10 +326,18 @@ export class Infrastructure {
         const next = prior
           .catch(() => {})
           .then(async () => {
+            // §42 idempotency that survives restarts and snapshot lag. The key is
+            // written only after persistence, so a failed attempt is redelivered.
+            const key = `segment:done:${s.id}`;
+            if (await this.redis!.exists(key).catch(() => 0)) {
+              this.channel!.ack(msg);
+              return;
+            }
             try {
               handler(s);
               await this.tail;
               this.channel!.ack(msg);
+              await this.redis!.set(key, "1", { EX: 86400 }).catch(() => {});
             } catch {
               const attempt = Number(msg.properties.headers?.attempt ?? 0);
               if (attempt >= 3) {

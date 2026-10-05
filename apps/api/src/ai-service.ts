@@ -22,7 +22,10 @@ export class AIService {
   constructor(routerFactory: (report: (u: AIUsage) => void) => AIRouter) {
     this.router = routerFactory((u) => this.record(u));
   }
+  /** Persistence sink (PostgreSQL ai_call in infra mode). */
+  onRecord?: (u: AIUsage) => void;
   private record(u: AIUsage) {
+    this.onRecord?.(u);
     this.usage.push(u);
     if (this.usage.length > 500) this.usage.shift();
     // §49: structured log without transcript content.
