@@ -47,10 +47,11 @@ const strings = (x: unknown) => {
 function profile(b: Record<string, unknown>): UserProfile {
   const ranked = (x: unknown) => {
     if (!Array.isArray(x) || x.length > 100) throw Error("Lista inválida");
-    return x.map((p) => ({
-      name: str(p.name),
-      importance: num(p.importance, 0, 100),
-    }));
+    return x.map((p: unknown) => {
+      if (typeof p !== "object" || p === null) throw Error("Lista inválida");
+      const item = p as Record<string, unknown>;
+      return { name: str(item.name), importance: num(item.importance, 0, 100) };
+    });
   };
   return {
     name: str(b.name),
@@ -273,9 +274,10 @@ async function main() {
   process.on("SIGINT", () => void shutdown());
   process.on("SIGTERM", () => void shutdown());
 }
-main().catch(() => {
+main().catch((error: unknown) => {
   console.error(
     "Não foi possível iniciar. Confira infraestrutura e variáveis de ambiente.",
+    error instanceof Error ? error.message : error,
   );
   process.exit(1);
 });

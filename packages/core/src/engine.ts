@@ -35,6 +35,7 @@ export const level = (score: number) =>
           : "URGENT";
 export const isOpen = (e: AttentionEvent) =>
   !["RESPONDED", "DISMISSED", "EXPIRED"].includes(e.status);
+const KNOWN_TOPICS = new Set(["api", "auth", "frontend", "redis"]);
 const topicOf = (t: string) =>
   /endpoint|api|backend/.test(t)
     ? "api"
@@ -76,16 +77,17 @@ export class AttentionEngine {
       reason,
       topic: topicOf(t),
     });
+    // Only "not needed" phrasing counts: a bare negation ("não conseguimos
+    // verificar agora") is usually a blocker, not a dismissal.
     if (
-      /nao (?:precisamos|precisa|necessitamos).*resposta|nao.*(?:responder|verificar).*agora|ja (?:foi )?(?:resolvido|respondido)|nao esta mais bloqueado/.test(
+      /nao (?:precisamos|precisa|necessitamos|e (?:mais )?(?:preciso|necessario))\b.*\b(?:resposta|responder|verificar)|ja (?:foi )?(?:resolvido|respondido)|nao esta mais bloqueado/.test(
         t,
       )
     )
-      return none(
-        8,
-        ["NONE"],
-        "Pedido dispensado ou resolvido explicitamente.",
-      );
+      return {
+        ...none(8, ["NONE"], "Pedido dispensado ou resolvido explicitamente."),
+        dismissal: true,
+      };
     if (
       named &&
       /\b(bom dia|boa tarde|boa noite|obrigad[oa]|parabens|oi)\b/.test(t) &&
@@ -128,81 +130,77 @@ export class AttentionEngine {
       );
     const relevant = named || (prior && question) || ongoing;
     const types: EventType[] = [];
+    // Base score per type, so each weight scales only its own type.
+    const base: Partial<Record<EventType, number>> = {};
     let score = 18,
       requiresResponse = false,
       confidence = 0.7;
-    if (named) {
-      types.push("MENTION");
-      score = 30;
-    }
+    const add = (type: EventType, value: number) => {
+      types.push(type);
+      base[type] = value;
+      score = Math.max(score, value);
+    };
+    if (named) add("MENTION", 30);
     if (named && question && !historical) {
-      types.push("DIRECT_QUESTION");
-      score = 78;
+      add("DIRECT_QUESTION", 78);
       requiresResponse = true;
       confidence = 0.92;
     } else if (prior && question) {
-      types.push("INDIRECT_QUESTION");
-      score = 67;
+      add("INDIRECT_QUESTION", 67);
       requiresResponse = true;
       confidence = 0.72;
     } else if (expertise && question) {
-      types.push("USER_EXPERTISE_REQUIRED");
-      score = 52;
+      add("USER_EXPERTISE_REQUIRED", 52);
       confidence = 0.6;
     }
     if (named && assignment) {
-      types.push(historical ? "USER_RESPONSIBILITY" : "TASK_ASSIGNED");
-      score = Math.max(score, historical ? 35 : 76);
+      add(
+        historical ? "USER_RESPONSIBILITY" : "TASK_ASSIGNED",
+        historical ? 35 : 76,
+      );
       requiresResponse = !historical;
     }
     if (relevant && /podemos.*(?:producao|deploy)|decidir|decisao/.test(t)) {
-      types.push("DECISION_REQUIRED");
-      score = Math.max(score, 80);
+      add("DECISION_REQUIRED", 80);
       requiresResponse = true;
     }
     if (relevant && /aprov|autoriz/.test(t)) {
-      types.push("APPROVAL_REQUIRED");
-      score = Math.max(score, 80);
+      add("APPROVAL_REQUIRED", 80);
       requiresResponse = true;
     }
     if (relevant && /confirm/.test(t)) {
-      types.push("CONFIRMATION_REQUIRED");
-      score = Math.max(score, 78);
+      add("CONFIRMATION_REQUIRED", 78);
       requiresResponse = true;
     }
     if (relevant && waiting) {
-      types.push("FOLLOW_UP");
-      score = Math.max(score, 80);
+      add("FOLLOW_UP", 80);
       requiresResponse = true;
     }
     if (relevant && /hoje|antes das|ate as|prazo|amanha/.test(t)) {
-      types.push("DEADLINE");
-      score = Math.max(score, prior ? 87 : score + 15);
+      add("DEADLINE", prior ? 87 : score + 15);
       requiresResponse = true;
     }
     if (
       relevant &&
       /sem isso|bloquead|nao conseguimos.*deploy|para continuar/.test(t)
     ) {
-      types.push("BLOCKER");
-      score = Math.max(score, 97);
+      add("BLOCKER", 97);
       requiresResponse = true;
       confidence = 0.9;
     }
     if (relevant && /urgente|agora|imediat/.test(t)) {
-      types.push("URGENT_REQUEST");
-      score = Math.max(score, 90);
+      add("URGENT_REQUEST", 90);
       requiresResponse = true;
     }
     if (
       !types.length &&
       profile.projects.some((p) => normalize(t).includes(normalize(p.name)))
-    ) {
-      types.push("USER_TOPIC");
-      score = 40;
-    }
+    )
+      add("USER_TOPIC", 40);
     if (!types.length) return none();
-    const weighted = Math.max(...types.map((x) => score * settings.weights[x]));
+    const weighted = Math.max(
+      ...types.map((x) => (base[x] ?? score) * settings.weights[x]),
+    );
     const importance = Math.max(
       0,
       ...profile.projects
@@ -254,16 +252,16 @@ export class AttentionEngine {
     meeting.transcript.push(segment);
     const d = this.detect(segment, context, profile, settings);
     if (d.score <= 20) {
-      if (d.reason.startsWith("Pedido")) {
+      if (d.dismissal) {
+        // A dismissal naming a known topic only closes that topic; a generic
+        // one ("não precisamos da resposta") closes the latest open request.
+        const generic =
+          !KNOWN_TOPICS.has(d.topic) &&
+          (d.topic === "general" ||
+            /respost|respond/.test(normalize(segment.text)));
         const resolved = [...meeting.events]
           .reverse()
-          .find(
-            (e) =>
-              isOpen(e) &&
-              (d.topic === e.topic ||
-                d.topic === "general" ||
-                /nao.*resposta/.test(normalize(segment.text))),
-          );
+          .find((e) => isOpen(e) && (e.topic === d.topic || generic));
         if (resolved) {
           resolved.status = "RESPONDED";
           resolved.updatedAt = now;
@@ -339,34 +337,23 @@ export class AttentionEngine {
     );
   }
   refresh(m: Meeting, s: Settings, now: number) {
+    const scores = [m.status === "ENDED" ? 0 : 18];
     for (const e of m.events.filter(isOpen)) {
       if (now - e.updatedAt >= s.expireMs) {
         e.status = "EXPIRED";
         continue;
       }
+      // Unanswered requests escalate, informational ones fade; e.score keeps
+      // the detected value so notification thresholds stay stable.
       const age = Math.floor((now - e.updatedAt) / 60000);
       const score = e.requiresResponse
         ? Math.min(100, e.score + Math.min(12, age * 2))
         : Math.max(0, e.score - age * 5);
       e.level = level(score);
+      e.requiresImmediateAttention = score >= 81 && e.confidence >= 0.8;
+      scores.push(score);
     }
-    m.attentionScore = Math.max(
-      m.status === "ENDED" ? 0 : 18,
-      ...m.events
-        .filter(isOpen)
-        .map((e) =>
-          e.requiresResponse
-            ? Math.min(
-                100,
-                e.score +
-                  Math.min(12, Math.floor((now - e.updatedAt) / 60000) * 2),
-              )
-            : Math.max(
-                0,
-                e.score - Math.floor((now - e.updatedAt) / 60000) * 5,
-              ),
-        ),
-    );
+    m.attentionScore = Math.max(...scores);
   }
 }
 export class MeetingPriorityEngine {

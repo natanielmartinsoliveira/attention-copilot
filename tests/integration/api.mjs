@@ -39,6 +39,20 @@ assert.equal(
   403,
 );
 assert.equal((await request("profile", { name: "" })).status, 400);
+{
+  const r = await request("profile", {
+    name: "A",
+    fullName: "A",
+    aliases: [],
+    role: "Dev",
+    teams: [],
+    projects: [null],
+    expertise: [],
+    people: [],
+  });
+  assert.equal(r.status, 400);
+  assert.equal(r.data.error, "Lista inválida");
+}
 assert.equal(
   (await request("settings", { minAttentionDelta: -1 })).status,
   400,

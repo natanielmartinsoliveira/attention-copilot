@@ -96,6 +96,31 @@ describe("Portuguese regression dataset", () => {
       new MeetingPriorityEngine().recommend([m], null).switchAttention,
     ).toBe(false);
   });
+  it("zero weight silences a type even when combined with others", () => {
+    const settings = {
+      ...defaultSettings,
+      weights: { ...defaultSettings.weights, BLOCKER: 0 },
+    };
+    const d = engine.detect(
+      seg("Nataniel, consegue verificar? Sem isso não conseguimos fazer o deploy."),
+      [],
+      defaultProfile,
+      settings,
+    );
+    expect(d.types).toContain("BLOCKER");
+    expect(d.score).toBeLessThan(97);
+  });
+  it("weights scale each type independently", () => {
+    const settings = {
+      ...defaultSettings,
+      weights: { ...defaultSettings.weights, MENTION: 2 },
+    };
+    expect(detect("Nataniel, consegue verificar?").score).toBe(78);
+    expect(
+      engine.detect(seg("Nataniel, consegue verificar?"), [], defaultProfile, settings)
+        .score,
+    ).toBe(78);
+  });
   it("aliases work", () =>
     expect(detect("Nathan, você consegue verificar?").types).toContain(
       "DIRECT_QUESTION",
@@ -161,6 +186,49 @@ describe("lifecycle and fatigue", () => {
     expect(m.events[0].status).toBe("RESPONDED");
     expect(m.attentionScore).toBe(18);
   });
+  it("blocker with negation is not mistaken for a dismissal", () => {
+    const m = make();
+    engine.ingest(
+      m,
+      seg("Nataniel, consegue verificar o endpoint?"),
+      defaultProfile,
+      defaultSettings,
+      now,
+      "e",
+    );
+    const d = detect("Nataniel, sem isso não conseguimos verificar agora o deploy");
+    expect(d.types).toContain("BLOCKER");
+    engine.ingest(
+      m,
+      seg("Nataniel, sem isso não conseguimos verificar agora o deploy", now + 1000),
+      defaultProfile,
+      defaultSettings,
+      now + 1000,
+      "e2",
+    );
+    expect(m.events[0].status).not.toBe("RESPONDED");
+    expect(m.attentionScore).toBeGreaterThanOrEqual(90);
+  });
+  it("dismissal about another topic keeps the open request", () => {
+    const m = make();
+    engine.ingest(
+      m,
+      seg("Nataniel, consegue verificar o endpoint?"),
+      defaultProfile,
+      defaultSettings,
+      now,
+      "e",
+    );
+    engine.ingest(
+      m,
+      seg("Não precisamos de resposta sobre o layout.", now + 1000),
+      defaultProfile,
+      defaultSettings,
+      now + 1000,
+      "e2",
+    );
+    expect(m.events[0].status).not.toBe("RESPONDED");
+  });
   it("unanswered question escalates with time", () => {
     const m = make();
     engine.ingest(
@@ -173,6 +241,22 @@ describe("lifecycle and fatigue", () => {
     );
     engine.refresh(m, defaultSettings, now + 300000);
     expect(m.attentionScore).toBe(88);
+  });
+  it("escalated level and immediate flag follow the decayed score", () => {
+    const m = make();
+    engine.ingest(
+      m,
+      seg("Nataniel, você consegue verificar?"),
+      defaultProfile,
+      defaultSettings,
+      now,
+      "e",
+    );
+    expect(m.events[0].requiresImmediateAttention).toBe(false);
+    engine.refresh(m, defaultSettings, now + 300000);
+    expect(m.events[0].level).toBe("URGENT");
+    expect(m.events[0].requiresImmediateAttention).toBe(true);
+    expect(m.events[0].score).toBe(78);
   });
   it("expired requests leave active attention", () => {
     const m = make();
@@ -310,6 +394,26 @@ describe("full two-meeting pipeline", () => {
     expect(s.meeting("backend").events[0].status).toBe("EXPIRED");
     s.delete("backend");
     expect(s.data.meetings).toHaveLength(1);
+  });
+  it("idle tick does not broadcast; visible change does", () => {
+    const s = new State();
+    s.ingest(seg("Nataniel, consegue verificar?"));
+    let calls = 0;
+    s.listeners.add(() => calls++);
+    s.tick();
+    s.tick();
+    expect(calls).toBe(0);
+    s.meeting("backend").events[0].updatedAt -= defaultSettings.expireMs;
+    s.tick();
+    expect(calls).toBe(1);
+    expect(s.meeting("backend").events[0].status).toBe("EXPIRED");
+  });
+  it("focus on unknown meeting leaves state untouched", () => {
+    const s = new State();
+    const before = s.meeting("frontend").lastUserAttentionAt;
+    expect(() => s.focus("nope")).toThrow();
+    expect(s.meeting("frontend").lastUserAttentionAt).toBe(before);
+    expect(s.data.focusId).toBe("frontend");
   });
   it("terminal event cannot reopen", () => {
     const s = new State();

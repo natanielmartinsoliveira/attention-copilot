@@ -88,7 +88,19 @@ export class State {
     this.tick(false);
     for (const f of this.listeners) f();
   }
+  /** What clients can see; lastUserAttentionAt moves every tick and is excluded. */
+  private visible() {
+    return JSON.stringify([
+      this.data.recommendation,
+      this.data.meetings.map((m) => [
+        m.attentionScore,
+        m.transcript.length,
+        m.events.map((e) => [e.status, e.level]),
+      ]),
+    ]);
+  }
   tick(emit = true) {
+    const before = emit ? this.visible() : "";
     const now = Date.now();
     for (const m of this.data.meetings) {
       this.engine.refresh(m, this.data.settings, now);
@@ -103,7 +115,8 @@ export class State {
       this.data.focusId,
       this.data.settings.minAttentionDelta,
     );
-    if (emit) for (const f of this.listeners) f();
+    if (emit && this.visible() !== before)
+      for (const f of this.listeners) f();
   }
   stop() {
     for (const t of this.timers) clearTimeout(t);
@@ -160,27 +173,25 @@ export class State {
     );
     this.emit();
   }
-  focus(id: string | null) {
-    const now = Date.now();
+  focus(id: string | null, mode: AppState["focusMode"] = id ? "MANUAL" : "AUTO") {
+    const now = Date.now(),
+      next = id ? this.meeting(id) : undefined;
     if (this.data.focusId && this.data.focusId !== id) {
-      this.meeting(this.data.focusId).lastUserAttentionAt = now;
-      this.meeting(this.data.focusId).catchUpSince = undefined;
-      this.meeting(this.data.focusId).catchUpUntil = undefined;
+      const previous = this.meeting(this.data.focusId);
+      previous.lastUserAttentionAt = now;
+      previous.catchUpSince = undefined;
+      previous.catchUpUntil = undefined;
     }
-    if (id && id !== this.data.focusId) {
-      this.meeting(id).catchUpSince = this.meeting(id).lastUserAttentionAt;
-      this.meeting(id).catchUpUntil = now;
+    if (next && next.id !== this.data.focusId) {
+      next.catchUpSince = next.lastUserAttentionAt;
+      next.catchUpUntil = now;
     }
     this.data.focusId = id;
-    this.data.focusMode = id ? "MANUAL" : "AUTO";
+    this.data.focusMode = mode;
     this.emit();
   }
   interact(id: string) {
-    if (this.data.focusMode === "AUTO") {
-      this.focus(id);
-      this.data.focusMode = "AUTO";
-      this.emit();
-    }
+    if (this.data.focusMode === "AUTO") this.focus(id, "AUTO");
   }
   transition(id: string, status: EventStatus) {
     const { m, e } = this.event(id);

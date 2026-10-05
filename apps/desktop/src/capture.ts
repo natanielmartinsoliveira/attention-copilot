@@ -53,8 +53,9 @@ export class BrowserTabAudioSource implements AudioSource {
       throw Error(
         "Use Chrome/Edge para selecionar uma aba. Captura nativa no Tauri ainda não está disponível.",
       );
+    // Chrome only offers tab audio together with video; ask for the cheapest video.
     this.stream = await navigator.mediaDevices.getDisplayMedia({
-      video: true,
+      video: { width: { max: 320 }, height: { max: 240 }, frameRate: { max: 1 } },
       audio: true,
     });
     if (!this.stream.getAudioTracks().length) {

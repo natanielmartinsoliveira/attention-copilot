@@ -120,6 +120,8 @@ export interface Detection {
   requiresResponse: boolean;
   reason: string;
   topic: string;
+  /** Explicit "no longer needed" statement; may resolve an open event. */
+  dismissal?: boolean;
 }
 export const defaultProfile: UserProfile = {
   name: "Nataniel",
