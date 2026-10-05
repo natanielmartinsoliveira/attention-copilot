@@ -89,6 +89,38 @@ export interface Meeting {
   lastRelevantEventAt?: number;
   transcript: TranscriptSegment[];
   events: AttentionEvent[];
+  /** Extracted at summary time; the user confirms, edits or ignores (§35). */
+  tasks?: ActionItem[];
+}
+export type ActionItemStatus = "PROPOSED" | "CONFIRMED" | "DISMISSED";
+export interface ActionItem {
+  /** Stable per source segment, so re-summarizing keeps user decisions. */
+  id: string;
+  meetingId: string;
+  text: string;
+  owner: string;
+  deadline: string | null;
+  confidence: number;
+  status: ActionItemStatus;
+  sourceSegmentId: string;
+  edited?: boolean;
+}
+export type TimelineKind =
+  | "START"
+  | "TOPIC"
+  | "MENTION"
+  | "QUESTION"
+  | "TASK"
+  | "DECISION"
+  | "DEADLINE"
+  | "BLOCKER"
+  | "CONFLICT"
+  | "FOLLOW_UP"
+  | "END";
+export interface TimelineEntry {
+  at: number;
+  kind: TimelineKind;
+  text: string;
 }
 export interface Settings {
   minAttentionDelta: number;

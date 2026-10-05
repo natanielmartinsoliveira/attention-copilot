@@ -101,6 +101,26 @@ assert.ok(
 const caught = await request("meetings/backend/catch-up", { ultra: true });
 assert.ok(caught.data.summary.length >= 1);
 assert.equal(caught.data.pending.length, 1);
+{
+  const full = (await request("meetings/backend/catch-up", {})).data;
+  assert.equal(full.action, "Responder a Maria e verificar o endpoint.");
+  const summary = (await request("meetings/backend/summary")).data;
+  const task = summary.tasks.find((t) => t.text === "verificar o endpoint");
+  assert.equal(task.deadline, "antes das 17h");
+  const confirmed = await request(`meetings/backend/tasks/${task.id}`, {
+    status: "CONFIRMED",
+  });
+  assert.equal(confirmed.data.status, "CONFIRMED");
+  assert.equal(
+    (await request(`meetings/backend/tasks/${task.id}`, { status: "DONE" }))
+      .status,
+    400,
+  );
+  const kinds = (await request("meetings/backend/timeline")).data.map(
+    (e) => e.kind,
+  );
+  assert.ok(kinds.includes("QUESTION") && kinds.includes("BLOCKER"));
+}
 assert.equal(
   (await request(`events/${event.id}/response`, {})).data.safe,
   true,

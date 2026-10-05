@@ -14,7 +14,7 @@ Socket.IO exige `{auth:{token}}` e emite `state` após cada mudança/reconexão.
 | POST   | /api/focus                 | {id: meetingId ou null para AUTO}                      |
 | POST   | /api/interaction           | {id: meetingId} evidência de foco em AUTO              |
 | POST   | /api/profile               | UserProfile validado                                   |
-| POST   | /api/settings              | minAttentionDelta, cooldownMs, retentionHours, weights |
+| POST   | /api/settings              | minAttentionDelta, cooldownMs, retentionHours, weights, urgentSound? |
 | POST   | /api/meetings              | {title, platform} retorna id                           |
 | POST   | /api/capture/start         | {} autoriza ingestão real nesta sessão                 |
 | POST   | /api/transcript            | TranscriptSegment, somente captura real ativa          |
@@ -22,8 +22,11 @@ Socket.IO exige `{auth:{token}}` e emite `state` após cada mudança/reconexão.
 | POST   | /api/events/:id/status     | {status: SEEN, ACKNOWLEDGED, RESPONDED, DISMISSED}     |
 | POST   | /api/events/:id/response   | {} rascunhos, safe e origem                            |
 | POST   | /api/events/:id/feedback   | {rating, reason opcional}                              |
-| POST   | /api/meetings/:id/catch-up | {ultra: boolean} não altera foco                       |
+| POST   | /api/meetings/:id/catch-up | {ultra: boolean} tópicos, AÇÃO e falas; não altera foco |
 | POST   | /api/meetings/:id/end      | {} resumo extrativo e encerramento                     |
+| GET    | /api/meetings/:id/summary  | Resumo: tópicos, decisões, tarefas, perguntas, follow-ups, timeline |
+| GET    | /api/meetings/:id/timeline | Linha do tempo da reunião                              |
+| POST   | /api/meetings/:id/tasks/:taskId | {status?: PROPOSED, CONFIRMED, DISMISSED; text?} |
 | POST   | /api/meetings/:id/clear    | {} apaga transcript e eventos                          |
 | DELETE | /api/meetings/:id          | Remove reunião e seus dados                            |
 

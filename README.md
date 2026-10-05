@@ -38,10 +38,14 @@ Para desenvolver: `npm run dev`. Verificação: `npm run check`, `npm test`.
 - Alertas por nível: LOW só conta no badge; MEDIUM e pedidos sem confiança
   suficiente geram aviso discreto na interface; HIGH notificação desktop;
   URGENT notificação + destaque + som suave opcional (desligado por padrão).
-- Catch-up do período fora do foco e extrato essencial de eventos relevantes.
+- Catch-up do período fora do foco em tópicos, com duração e AÇÃO sugerida;
+  "Essencial" lista só decisão, tarefa, pergunta, bloqueio, prazo e divergência.
 - Respostas conservadoras editáveis; nenhuma execução/envio de resposta.
 - Perfil, projetos, pessoas, expertise e pesos editáveis em formulário JSON.
-- Feedback, exclusão de reunião/transcrição, retenção, resumo final extrativo.
+- Feedback, exclusão de reunião/transcrição, retenção.
+- Resumo final extrativo: tópicos, decisões explícitas, tarefas com responsável,
+  prazo e confiança (Confirmar/Editar/Ignorar), perguntas, follow-ups e linha do
+  tempo (também disponível durante a reunião). Só cita frases ditas.
 - Autenticação por código local, validação de entrada e serviços ligados ao loopback.
 - Docker Compose e migration PostgreSQL; adaptadores PostgreSQL/Redis/RabbitMQ.
 - Caminho experimental real: seleção de aba no Chrome/Edge → PCM em memória →
@@ -130,7 +134,7 @@ Captura de abas usa a interface web, não o WebView do Tauri.
   confiável de resposta/resolução em todos os casos.
 - Adapters comerciais OpenAI/Anthropic/Gemini: contrato e router existem; o fluxo
   executado é local. Não há chamada paga nem métricas fictícias de tokens/custo.
-- Resumo abstrativo, decisões inferidas e tarefas externas.
+- Resumo abstrativo (reescrita por LLM), decisões inferidas e tarefas externas.
 - Inferência de foco por janela ativa: AUTO usa interação explícita na interface.
 - Auth por conta do SO, armazenamento em keychain, encryption-at-rest, instalador,
   atualizador e operação distribuída tolerante a falhas.

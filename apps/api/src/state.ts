@@ -7,6 +7,7 @@ import {
 import {
   defaultProfile,
   defaultSettings,
+  type ActionItemStatus,
   type AppState,
   type EventStatus,
   type TranscriptSegment,
@@ -19,6 +20,7 @@ import {
   catchUp,
   generateResponse,
   summarizeMeeting,
+  timeline,
 } from "../../../packages/core/src/assistant.js";
 export class State {
   engine = new AttentionEngine();
@@ -215,7 +217,44 @@ export class State {
     this.emit();
   }
   catchUp(id: string, ultra: boolean) {
-    return catchUp(this.meeting(id), Date.now(), ultra);
+    return catchUp(
+      this.meeting(id),
+      Date.now(),
+      ultra,
+      this.data.profile,
+      this.data.settings,
+    );
+  }
+  /** Builds the §34 summary and stores extracted tasks for §35 review. */
+  summary(id: string) {
+    const m = this.meeting(id);
+    const summary = summarizeMeeting(m, this.data.profile, this.data.settings);
+    m.tasks = summary.tasks;
+    return summary;
+  }
+  timeline(id: string) {
+    return timeline(this.meeting(id), this.data.profile, this.data.settings);
+  }
+  updateTask(
+    meetingId: string,
+    taskId: string,
+    patch: { status?: ActionItemStatus; text?: string },
+  ) {
+    const m = this.meeting(meetingId),
+      task = m.tasks?.find((t) => t.id === taskId);
+    if (!task) throw Error("Tarefa inexistente");
+    if (
+      patch.status !== undefined &&
+      !["PROPOSED", "CONFIRMED", "DISMISSED"].includes(patch.status)
+    )
+      throw Error("Status de tarefa inválido");
+    if (patch.status) task.status = patch.status;
+    if (patch.text !== undefined) {
+      task.text = patch.text;
+      task.edited = true;
+    }
+    this.emit();
+    return task;
   }
   response(id: string) {
     const { m, e } = this.event(id);
@@ -234,7 +273,7 @@ export class State {
   }
   end(id: string) {
     const m = this.meeting(id);
-    const summary = summarizeMeeting(m);
+    const summary = this.summary(id);
     m.status = "ENDED";
     m.endedAt = Date.now();
     for (const e of m.events.filter(isOpen)) e.status = "EXPIRED";
@@ -252,6 +291,7 @@ export class State {
     const m = this.meeting(id);
     m.transcript = [];
     m.events = [];
+    m.tasks = [];
     this.emit();
   }
   create(title: string, platform: string) {

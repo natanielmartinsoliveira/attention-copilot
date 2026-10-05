@@ -67,7 +67,21 @@ await page
   .nth(1)
   .click();
 await page.getByRole("dialog").waitFor();
-assert.ok((await page.getByRole("dialog").innerText()).includes("endpoint"));
+{
+  const text = await page.getByRole("dialog").innerText();
+  assert.ok(text.includes("Maria pediu diretamente sua ajuda"));
+  assert.ok(text.includes("AÇÃO: Responder a Maria e verificar o endpoint."));
+}
+await page.getByRole("button", { name: "Fechar", exact: true }).click();
+await page
+  .getByRole("button", { name: "Linha do tempo", exact: true })
+  .nth(1)
+  .click();
+assert.ok(
+  (await page.getByRole("dialog").innerText()).includes(
+    "pergunta direta de Maria",
+  ),
+);
 await page.getByRole("button", { name: "Fechar", exact: true }).click();
 await page
   .locator(".recommendation")
@@ -128,6 +142,14 @@ assert.ok(
   (await page.locator(".recommendation").innerText()).includes("61%"),
 );
 await post("stop", {});
+// §34/§35: ending the meeting shows the summary with a reviewable task.
+await page.getByRole("button", { name: "Finalizar", exact: true }).nth(1).click();
+const dialog = page.getByRole("dialog");
+await dialog.getByText("verificar o endpoint", { exact: true }).waitFor();
+assert.ok((await dialog.innerText()).includes("Prazo: antes das 17h"));
+await dialog.getByRole("button", { name: "Confirmar", exact: true }).first().click();
+await dialog.locator(".task.confirmed").first().waitFor();
+await page.getByRole("button", { name: "Fechar", exact: true }).click();
 await page.getByRole("button", { name: "Configurar", exact: true }).click();
 const config = JSON.parse(
   await page.getByLabel("Configuração do perfil").inputValue(),

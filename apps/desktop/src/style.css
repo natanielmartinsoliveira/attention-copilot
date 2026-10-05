@@ -573,3 +573,62 @@ footer {
   border-color: #c5785a;
   box-shadow: inset 4px 0 0 #ff8a65;
 }
+/* §20 catch-up, §34–§36 summary, tasks and timeline */
+.lead {
+  font-size: 17px;
+  font-weight: 600;
+}
+.action {
+  padding: 12px 14px;
+  border: 1px solid #765047;
+  background: #2d201e;
+  border-radius: 8px;
+}
+.task {
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px;
+  margin: 8px 0;
+  background: #151f2c;
+  border: 1px solid #2b394d;
+  border-radius: 8px;
+}
+.task.confirmed {
+  border-color: #2a5145;
+}
+.task.dismissed {
+  opacity: 0.55;
+}
+.task input {
+  width: 100%;
+}
+.timeline {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0;
+}
+.timeline li {
+  display: flex;
+  gap: 12px;
+  padding: 4px 0;
+  border-left: 2px solid #344255;
+  padding-left: 12px;
+}
+.timeline time {
+  color: #8797ad;
+  font-variant-numeric: tabular-nums;
+  min-width: 64px;
+}
+.timeline .tl-question,
+.timeline .tl-blocker,
+.timeline .tl-task {
+  border-left-color: #ff8a65;
+}
+.timeline .tl-decision {
+  border-left-color: #81d8cc;
+}
+details summary {
+  cursor: pointer;
+  color: #8797ad;
+  margin: 10px 0;
+}

@@ -10,6 +10,7 @@ import { State } from "./state.js";
 import { Infrastructure } from "./infrastructure.js";
 import {
   EVENT_TYPES,
+  type ActionItemStatus,
   type EventStatus,
   type UserProfile,
   type TranscriptSegment,
@@ -105,6 +106,11 @@ class Api {
           });
         const c = path.match(/^events\/([^/]+)\/context$/);
         if (c) return res.json(state.context(c[1]));
+        const g = path.match(/^meetings\/([^/]+)\/(summary|timeline)$/);
+        if (g)
+          return res.json(
+            g[2] === "summary" ? state.summary(g[1]) : state.timeline(g[1]),
+          );
       }
       if (req.method === "POST") {
         if (path === "demo/start") {
@@ -188,6 +194,17 @@ class Api {
           } else state.transition(e[1], b.status as EventStatus);
           return res.json({ ok: true });
         }
+        const t = path.match(/^meetings\/([^/]+)\/tasks\/([^/]+)$/);
+        if (t)
+          return res.json(
+            state.updateTask(t[1], t[2], {
+              status:
+                b.status === undefined
+                  ? undefined
+                  : (str(b.status, 20) as ActionItemStatus),
+              text: b.text === undefined ? undefined : str(b.text, 300),
+            }),
+          );
         const m = path.match(/^meetings\/([^/]+)\/(catch-up|end|clear)$/);
         if (m) {
           if (m[2] === "catch-up")

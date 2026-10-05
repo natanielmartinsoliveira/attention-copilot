@@ -36,8 +36,8 @@ export const level = (score: number) =>
           : "URGENT";
 export const isOpen = (e: AttentionEvent) =>
   !["RESPONDED", "DISMISSED", "EXPIRED"].includes(e.status);
-const KNOWN_TOPICS = new Set(["api", "auth", "frontend", "redis"]);
-const topicOf = (t: string) =>
+export const KNOWN_TOPICS = new Set(["api", "auth", "frontend", "redis"]);
+export const topicOf = (t: string) =>
   /endpoint|api|backend/.test(t)
     ? "api"
     : /autentic|login|token/.test(t)

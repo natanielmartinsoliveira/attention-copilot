@@ -2,9 +2,13 @@ import React, { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { io, type Socket } from "socket.io-client";
 import type {
+  ActionItem,
+  ActionItemStatus,
   AppState,
   AttentionEvent,
+  EventStatus,
   Meeting,
+  TimelineEntry,
 } from "../../../packages/core/src/types";
 import { alertChannel, isOpen } from "../../../packages/core/src/engine";
 import { BrowserTabAudioSource } from "./capture";
@@ -22,6 +26,66 @@ const time = (n: number) =>
     minute: "2-digit",
     second: "2-digit",
   });
+const count = (n: number, one: string, many: string) =>
+  `${n} ${n === 1 ? one : many}`;
+const EVENT_STATUS: Record<EventStatus, string> = {
+  DETECTED: "detectada",
+  NOTIFIED: "notificada",
+  SEEN: "vista",
+  ACKNOWLEDGED: "ciente",
+  RESPONDED: "respondida",
+  DISMISSED: "ignorada",
+  EXPIRED: "expirada",
+};
+const TASK_STATUS: Record<ActionItemStatus, string> = {
+  PROPOSED: "proposta",
+  CONFIRMED: "confirmada",
+  DISMISSED: "ignorada",
+};
+function Bullets({ items, empty }: { items: string[]; empty: string }) {
+  return items.length ? (
+    <ul>
+      {items.map((t, i) => (
+        <li key={i}>{t}</li>
+      ))}
+    </ul>
+  ) : (
+    <p className="muted">{empty}</p>
+  );
+}
+function Action({ text }: { text: string | null }) {
+  return text ? (
+    <p className="action">
+      <strong>AÇÃO:</strong> {text}
+    </p>
+  ) : null;
+}
+function RawLines({ lines, label }: { lines: string[]; label: string }) {
+  return lines.length ? (
+    <details>
+      <summary>
+        {label} ({lines.length})
+      </summary>
+      <ul>
+        {lines.map((l, i) => (
+          <li key={i}>{l}</li>
+        ))}
+      </ul>
+    </details>
+  ) : null;
+}
+function Timeline({ entries }: { entries: TimelineEntry[] }) {
+  return (
+    <ol className="timeline">
+      {entries.map((e, i) => (
+        <li key={i} className={`tl-${e.kind.toLowerCase()}`}>
+          <time>{time(e.at)}</time>
+          <span>{e.text}</span>
+        </li>
+      ))}
+    </ol>
+  );
+}
 function App() {
   const [token, setToken] = useState(
       sessionStorage.getItem("attention-token") || "",
@@ -42,7 +106,10 @@ function App() {
     [config, setConfig] = useState(""),
     [notifs, setNotifs] = useState(false),
     [audioIds, setAudioIds] = useState<string[]>([]),
-    [toast, setToast] = useState<{ id: string; text: string } | null>(null);
+    [toast, setToast] = useState<{ id: string; text: string } | null>(null),
+    [editing, setEditing] = useState<{ id: string; text: string } | null>(
+      null,
+    );
   const socket = useRef<Socket | null>(null),
     notified = useRef(new Set<string>()),
     sources = useRef(new Map<string, BrowserTabAudioSource>()),
@@ -175,9 +242,33 @@ function App() {
           ? "O que preciso saber?"
           : `O que você perdeu · ${m.title}`,
         data: await api(`meetings/${m.id}/catch-up`, { ultra }),
-        kind: "catchup",
+        kind: ultra ? "essentials" : "catchup",
       }),
     );
+  const showSummary = (m: Meeting, data?: unknown) =>
+    action(async () =>
+      setModal({
+        title: `Resumo · ${m.title}`,
+        data: data ?? (await api(`meetings/${m.id}/summary`)),
+        kind: "summary",
+        id: m.id,
+      }),
+    );
+  const showTimeline = (m: Meeting) =>
+    action(async () =>
+      setModal({
+        title: `Linha do tempo · ${m.title}`,
+        data: await api(`meetings/${m.id}/timeline`),
+        kind: "timeline",
+      }),
+    );
+  const updateTask = (meetingId: string, taskId: string, patch: object) =>
+    action(async () => {
+      await api(`meetings/${meetingId}/tasks/${taskId}`, patch);
+      setEditing(null);
+      const data = await api(`meetings/${meetingId}/summary`);
+      setModal((current) => (current ? { ...current, data } : current));
+    });
   const capture = (m: Meeting) =>
     action(async () => {
       if (state?.demo && state.running)
@@ -547,6 +638,12 @@ function App() {
                     </button>
                     <button onClick={() => catchup(m)}>Catch me up</button>
                     <button onClick={() => catchup(m, true)}>Essencial</button>
+                    <button onClick={() => showTimeline(m)}>
+                      Linha do tempo
+                    </button>
+                    {m.status === "ENDED" && (
+                      <button onClick={() => showSummary(m)}>Ver resumo</button>
+                    )}
                   </div>
                   <div className="transcript-head">
                     <span>TRANSCRIÇÃO {state.demo ? "SIMULADA" : "LOCAL"}</span>
@@ -594,11 +691,10 @@ function App() {
                             sources.current.delete(m.id);
                             setAudioIds([...sources.current.keys()]);
                           }
-                          setModal({
-                            title: "Resumo da reunião",
-                            data: await api(`meetings/${m.id}/end`, {}),
-                            kind: "summary",
-                          });
+                          await showSummary(
+                            m,
+                            await api(`meetings/${m.id}/end`, {}),
+                          );
                         })
                       }
                     >
@@ -854,39 +950,151 @@ function App() {
               </>
             ) : modal.kind === "catchup" ? (
               <>
-                <p>
-                  Período fora do foco: {modal.data.missedSeconds} segundos.
+                <p className="lead">Você perdeu {modal.data.missedLabel}.</p>
+                <h3>Resumo</h3>
+                <Bullets
+                  items={modal.data.summary}
+                  empty="Nada relevante para você neste período."
+                />
+                {modal.data.pending.length > 0 && (
+                  <>
+                    <h3>⚠️ Agora</h3>
+                    {modal.data.pending.map((p: any) => (
+                      <p key={p.eventId}>
+                        {p.reason}
+                        <br />
+                        Pergunta: “{p.question}”
+                      </p>
+                    ))}
+                  </>
+                )}
+                <Action text={modal.data.action} />
+                <RawLines lines={modal.data.lines} label="Todas as falas do período" />
+                <p className="muted">
+                  Extrato local: só frases ditas na reunião, nada inventado.
                 </p>
-                <p className="muted">Extratos locais do período perdido.</p>
-                <ul>
+              </>
+            ) : modal.kind === "essentials" ? (
+              <>
+                <p className="lead">
+                  {modal.data.summary.length === 0
+                    ? "Nada importante aconteceu enquanto você estava fora."
+                    : modal.data.summary.length === 1
+                      ? "1 coisa importante aconteceu:"
+                      : `${modal.data.summary.length} coisas importantes aconteceram:`}
+                </p>
+                <ol>
                   {modal.data.summary.map((t: string, i: number) => (
                     <li key={i}>{t}</li>
                   ))}
-                </ul>
-                <h3>Agora</h3>
-                {modal.data.pending.length ? (
-                  modal.data.pending.map((p: any) => (
-                    <p key={p.eventId}>
-                      {p.question}
-                      <br />
-                      {p.reason}
-                    </p>
-                  ))
-                ) : (
-                  <p>Nenhuma pergunta pendente identificada.</p>
-                )}
+                </ol>
+                <Action text={modal.data.action} />
+                <p className="muted">Período fora do foco: {modal.data.missedLabel}.</p>
               </>
+            ) : modal.kind === "timeline" ? (
+              <Timeline entries={modal.data} />
             ) : (
               <>
-                <p>Extrato local, sem inferir decisões.</p>
-                <ul>
-                  {modal.data.summary.map((s: string, i: number) => (
-                    <li key={i}>{s}</li>
-                  ))}
-                </ul>
-                <p>
-                  {modal.data.tasks.length} tarefas explícitas identificadas ·{" "}
-                  {modal.data.ignored.length} eventos ignorados.
+                <h3>Resumo</h3>
+                <Bullets
+                  items={modal.data.summary}
+                  empty="Nenhum ponto relevante identificado."
+                />
+                <h3>Decisões</h3>
+                <Bullets
+                  items={modal.data.decisions.map(
+                    (d: any) => `${d.speaker}: “${d.text}”`,
+                  )}
+                  empty="Nenhuma decisão explícita."
+                />
+                <h3>Tarefas</h3>
+                {!modal.data.tasks.length && (
+                  <p className="muted">Nenhuma tarefa identificada.</p>
+                )}
+                {modal.data.tasks.map((t: ActionItem) => (
+                  <div className={`task ${t.status.toLowerCase()}`} key={t.id}>
+                    {editing?.id === t.id ? (
+                      <input
+                        aria-label="Texto da tarefa"
+                        value={editing.text}
+                        maxLength={300}
+                        onChange={(e) =>
+                          setEditing({ id: t.id, text: e.target.value })
+                        }
+                      />
+                    ) : (
+                      <strong>{t.text}</strong>
+                    )}
+                    <small>
+                      Responsável: {t.owner} · Prazo:{" "}
+                      {t.deadline ?? "não mencionado"} · Confiança:{" "}
+                      {Math.round(t.confidence * 100)}% ·{" "}
+                      {TASK_STATUS[t.status]}
+                    </small>
+                    <div className="event-actions">
+                      {editing?.id === t.id ? (
+                        <button
+                          className="primary"
+                          onClick={() =>
+                            updateTask(modal.id!, t.id, { text: editing.text })
+                          }
+                        >
+                          Salvar
+                        </button>
+                      ) : (
+                        <>
+                          <button
+                            disabled={t.status === "CONFIRMED"}
+                            onClick={() =>
+                              updateTask(modal.id!, t.id, {
+                                status: "CONFIRMED",
+                              })
+                            }
+                          >
+                            Confirmar
+                          </button>
+                          <button
+                            onClick={() =>
+                              setEditing({ id: t.id, text: t.text })
+                            }
+                          >
+                            Editar
+                          </button>
+                          <button
+                            disabled={t.status === "DISMISSED"}
+                            onClick={() =>
+                              updateTask(modal.id!, t.id, {
+                                status: "DISMISSED",
+                              })
+                            }
+                          >
+                            Ignorar
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                <h3>Perguntas</h3>
+                <Bullets
+                  items={modal.data.questions.map(
+                    (q: any) =>
+                      `${q.speaker ?? "?"}: “${q.question}” · ${EVENT_STATUS[q.status as EventStatus]}`,
+                  )}
+                  empty="Nenhuma pergunta para você."
+                />
+                <h3>Possíveis follow-ups</h3>
+                <Bullets items={modal.data.followUps} empty="Nenhum." />
+                <p className="muted">
+                  {count(modal.data.missed.length, "item relevante não aberto", "itens relevantes não abertos")}{" "}
+                  · {count(modal.data.attentionItems.length, "exigiu atenção", "exigiram atenção")}{" "}
+                  · {count(modal.data.ignored.length, "ignorado", "ignorados")}
+                </p>
+                <h3>Linha do tempo</h3>
+                <Timeline entries={modal.data.timeline} />
+                <RawLines lines={modal.data.transcript} label="Transcrição completa" />
+                <p className="muted">
+                  Extrato local. Nenhuma tarefa é criada fora do aplicativo.
                 </p>
               </>
             )}
