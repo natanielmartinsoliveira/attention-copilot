@@ -103,3 +103,18 @@ Gemini flash-lite. O mesmo teste mostrou o Groq prometendo "antes das 17h" em
 rascunho, o que motivou a validação de compromisso.
 **Consequência:** custo e latência só em eventos incertos; com providers fora,
 o produto se comporta como a versão local.
+
+## ADR 007 — STT atrás de SpeechToTextProvider (2026-10-05)
+
+**Decisão:** o worker Python transcreve por uma interface `SpeechToTextProvider`
+com `FasterWhisperProvider` (local, padrão, modelo carregado no primeiro uso),
+`OpenAICompatibleSTT` (endpoint `/audio/transcriptions` de Groq ou OpenAI) e
+`FallbackSTT` (cadeia ordenada por `STT_PROVIDERS`). O VAD Silero continua como
+portão antes de qualquer provider. Provider remoto exige chave e é opt-in.
+**Evidência:** frase sintética em português (gTTS, fora do repositório). Groq
+`whisper-large-v3-turbo`: 0,55 s e texto correto, mas grafou "Nathaniel". Isso
+mostrou que a detecção do nome dependia da grafia; `mentions` passou a comparar
+formas fonéticas (th→t, ph→f, y→i, letras dobradas), mantendo palavra inteira
+para não aceitar "Nataniela".
+**Consequência:** trocar de STT não toca o worker HTTP nem o motor. Diarização
+continua pendente: precisa de modelo com termos aceitos no Hugging Face.

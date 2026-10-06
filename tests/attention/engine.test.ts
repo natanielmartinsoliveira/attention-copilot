@@ -170,6 +170,17 @@ describe("Portuguese regression dataset", () => {
     high.events[0].status = "RESPONDED";
     expect(alertChannel(high.events[0])).toBe("NONE");
   });
+  it("STT spelling variants of the name still match (seen live: 'Nathaniel')", () => {
+    for (const text of [
+      "Nathaniel, você consegue verificar o endpoint?",
+      "Nattaniel, você consegue verificar?",
+    ])
+      expect(detect(text).types, text).toContain("DIRECT_QUESTION");
+  });
+  it("phonetic matching does not swallow other names", () => {
+    for (const text of ["Nataniela, você consegue verificar?", "Natália, você consegue verificar?", "Nathalia, pode verificar?"])
+      expect(detect(text).score, text).toBe(18);
+  });
   it("aliases work", () =>
     expect(detect("Nathan, você consegue verificar?").types).toContain(
       "DIRECT_QUESTION",

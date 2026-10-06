@@ -134,6 +134,15 @@ notificação agressiva ou recomendação automática de troca até haver confir
 mais confiável. O modelo Whisper é baixado no primeiro uso; para operação sem rede, pré-carregue
 o modelo e configure `STT_MODEL` com o caminho local. STT em português por padrão.
 
+O STT segue a interface `SpeechToTextProvider` (`apps/worker/providers.py`):
+faster-whisper local (padrão) ou Whisper em API compatível com OpenAI (Groq,
+OpenAI), em cadeia com fallback via `STT_PROVIDERS` (ex.: `groq,faster-whisper`).
+Provider remoto envia áudio para fora da máquina: só entra se configurado, e
+`/health` do worker informa `sendsAudioOffMachine`. O VAD vem antes de qualquer
+provider; silêncio nunca é enviado. Teste com frase sintética: Groq
+`whisper-large-v3-turbo` em ~0,5 s transcreveu corretamente; o `tiny` local
+errou o nome. Use `small` ou maior localmente.
+
 **Limites:** browser deve oferecer áudio de aba; janela/tela podem não oferecer
 áudio. O áudio não identifica speakers; usa “Voz não identificada”. Buffers
 independentes perdem continuidade entre blocos; se STT não acompanhar, descarta

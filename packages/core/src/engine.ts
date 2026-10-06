@@ -15,13 +15,20 @@ export const normalize = (s: string) =>
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase();
 const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+/** Folds spelling variants STT engines produce for names ("Nathaniel" for
+ * "Nataniel"). Whole-word matching still applies, so "Nataniela" stays out. */
+const phonetic = (s: string) =>
+  normalize(s)
+    .replace(/th/g, "t")
+    .replace(/ph/g, "f")
+    .replace(/y/g, "i")
+    .replace(/([a-z])\1+/g, "$1");
 export function mentions(text: string, p: UserProfile) {
+  const spoken = phonetic(text);
   return [p.name, p.fullName, ...p.aliases]
     .filter(Boolean)
     .some((n) =>
-      new RegExp(`(?:^|[^a-z0-9])${esc(normalize(n))}(?=$|[^a-z0-9])`).test(
-        normalize(text),
-      ),
+      new RegExp(`(?:^|[^a-z0-9])${esc(phonetic(n))}(?=$|[^a-z0-9])`).test(spoken),
     );
 }
 export const level = (score: number) =>
