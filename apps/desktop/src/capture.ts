@@ -9,6 +9,20 @@ export interface ApplicationAudioSource extends AudioSource {
   kind: "application";
   processId: number;
 }
+export const WORKER_URL = "http://127.0.0.1:4318";
+export const WORKER_DOWN =
+  "O worker de transcrição não responde em 127.0.0.1:4318. Inicie-o (docs/validacao-captura-real.md, passo 1) e tente de novo.";
+/** Quick /health probe; short enough to keep the click's user activation for the picker. */
+export async function checkWorker(fetchImpl: typeof fetch = fetch) {
+  try {
+    const r = await fetchImpl(`${WORKER_URL}/health`, {
+      signal: AbortSignal.timeout(2000),
+    });
+    if (!r.ok) throw Error();
+  } catch {
+    throw Error(WORKER_DOWN);
+  }
+}
 export type BlockHandler = (
   samples: Float32Array,
   start: number,
@@ -91,6 +105,8 @@ export class BrowserTabAudioSource implements AudioSource {
       throw Error(
         "Use Chrome/Edge para selecionar uma aba. Captura nativa no Tauri ainda não está disponível.",
       );
+    // Fail before the tab picker: capturing with no worker transcribes nothing.
+    await checkWorker();
     // Chrome only offers tab audio together with video; ask for the cheapest video.
     this.stream = await navigator.mediaDevices.getDisplayMedia({
       video: { width: { max: 320 }, height: { max: 240 }, frameRate: { max: 1 } },
@@ -148,7 +164,7 @@ export class BrowserTabAudioSource implements AudioSource {
     this.abort = new AbortController();
     const timeout = setTimeout(() => this.abort?.abort(), 15000);
     try {
-      const r = await fetch("http://127.0.0.1:4318/transcribe", {
+      const r = await fetch(`${WORKER_URL}/transcribe`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${this.token}`,
@@ -156,6 +172,9 @@ export class BrowserTabAudioSource implements AudioSource {
         },
         body: wav(samples, 16000),
         signal: this.abort.signal,
+      }).catch((e) => {
+        // fetch only rejects on network/CORS failure: the worker is unreachable.
+        throw e instanceof TypeError ? Error(WORKER_DOWN) : e;
       });
       if (!r.ok)
         throw Error(

@@ -71,4 +71,9 @@ async def endpoint(request:Request):
             result=await asyncio.to_thread(transcribe,audio)
         except RuntimeError:
             raise HTTPException(503,'No STT provider available')
+        except Exception as error:
+            # Unhandled errors bypass CORS headers and reach the browser as a bare
+            # "Failed to fetch"; answer 500 so the panel can say what happened.
+            log_failure('pipeline',error)
+            raise HTTPException(500,'STT failed; see worker log')
     return {'text':result.text,'speaker':'unknown','latencyMs':round((time.monotonic()-start)*1000),'provider':result.provider,'model':result.model}

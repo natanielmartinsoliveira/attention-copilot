@@ -25,6 +25,12 @@ async function profile(meetingTitle, card) {
   // OS/browser picker is replaced: a synthetic tab stream (tone + canvas video).
   // BrowserTabAudioSource, the 16 kHz worklet and track lifecycle run for real.
   await context.addInitScript((title) => {
+    // No STT worker in this test: answer its health probe.
+    const realFetch = window.fetch.bind(window);
+    window.fetch = (input, init) =>
+      String(input).startsWith("http://127.0.0.1:4318/health")
+        ? Promise.resolve(new Response("{}", { status: 200 }))
+        : realFetch(input, init);
     navigator.mediaDevices.getDisplayMedia = async () => {
       const ctx = new AudioContext();
       const osc = ctx.createOscillator();
