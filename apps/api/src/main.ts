@@ -195,10 +195,7 @@ class Api {
           return res.json({ id: state.create(str(b.title), str(b.platform)) });
         }
         if (path === "capture/start") {
-          state.stop();
-          state.data.running = true;
-          state.data.demo = false;
-          state.emit();
+          state.startCapture();
           return res.json({ ok: true });
         }
         if (path === "transcript") {
@@ -309,8 +306,20 @@ async function main() {
       ? next()
       : next(Error("Unauthorized")),
   );
+  // One panel owns desktop notifications, so several panels (e.g. one per
+  // Chrome profile) do not alert twice. Latest claim wins; released on leave.
+  let notifier: string | null = null;
+  const setNotifier = (id: string | null) => {
+    notifier = id;
+    io.emit("notifier", notifier);
+  };
   io.on("connection", (s) => {
     s.emit("state", state.data);
+    s.emit("notifier", notifier);
+    s.on("claim-notifier", () => setNotifier(s.id));
+    s.on("disconnect", () => {
+      if (notifier === s.id) setNotifier(null);
+    });
   });
   state.listeners.add(() => {
     io.emit("state", state.data);

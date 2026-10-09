@@ -119,7 +119,9 @@ function App() {
   const socket = useRef<Socket | null>(null),
     notified = useRef(new Set<string>()),
     sources = useRef(new Map<string, BrowserTabAudioSource>()),
-    notifEnabled = useRef(false);
+    notifEnabled = useRef(false),
+    notifierId = useRef<string | null>(null);
+  const [owner, setOwner] = useState(false);
   async function api(
     path: string,
     body?: unknown,
@@ -169,8 +171,21 @@ function App() {
       setConnected(false);
       setError("Sem conexão autenticada com o serviço local.");
     });
+    s.on("notifier", (id: string | null) => {
+      notifierId.current = id;
+      setOwner(id !== null && id === s.id);
+      // Owner panel closed: a panel that still wants alerts takes over.
+      if (id === null && notifEnabled.current) s.emit("claim-notifier");
+    });
     s.on("state", (data: AppState) => {
       setState(data);
+      // §64: STOP anywhere (another window or Chrome profile) ends this panel's
+      // tab capture too, not just server-side ingestion.
+      if ((!data.running || data.demo) && sources.current.size) {
+        void stopAudio();
+        setError("Captura encerrada em outra janela.");
+      }
+      const isNotifier = notifierId.current === s.id;
       // §17: BADGE is only counted in the header; DISCREET shows an in-app
       // toast once per event; DESKTOP/URGENT once per engine notification.
       for (const m of data.meetings)
@@ -187,12 +202,17 @@ function App() {
           const key = e.id + ":" + e.notifiedAt;
           if (notified.current.has(key)) continue;
           notified.current.add(key);
-          if (notifEnabled.current)
+          if (notifEnabled.current && isNotifier)
             void notify(
               `${channel === "URGENT" ? "🔴 " : ""}Attention Copilot · ${m.platform}`,
               `${e.reason}\n“${e.quote}”`,
             ).catch(() => {});
-          if (channel === "URGENT" && data.settings.urgentSound)
+          // With no notifier every panel chimes (the usual single-panel case).
+          if (
+            channel === "URGENT" &&
+            data.settings.urgentSound &&
+            (isNotifier || notifierId.current === null)
+          )
             void playSoftTone().catch(() => {});
         }
     });
@@ -570,10 +590,16 @@ function App() {
                   setNotifs(ok);
                   if (!ok)
                     throw Error("Permissão de notificação não concedida.");
+                  // This panel becomes the only one that pops desktop alerts.
+                  socket.current?.emit("claim-notifier");
                 })
               }
             >
-              {notifs ? "✓ Alertas desktop" : "Ativar alertas desktop"}
+              {!notifs
+                ? "Ativar alertas desktop"
+                : owner
+                  ? "✓ Alertas desktop"
+                  : "Alertas em outra janela · assumir"}
             </button>
             <button
               aria-pressed={!!state.settings.urgentSound}

@@ -138,6 +138,15 @@ export class State {
     this.data.running = false;
     this.emit();
   }
+  /** Enables real capture without a transient running=false broadcast: other
+   * panels stop their tabs when they see capture stop (§64 single STOP). */
+  startCapture() {
+    for (const t of this.timers) clearTimeout(t);
+    this.timers.clear();
+    this.data.running = true;
+    this.data.demo = false;
+    this.emit();
+  }
   reset() {
     this.stop();
     const profile = this.data.profile,

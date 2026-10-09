@@ -45,6 +45,15 @@ transcrições serão lentas. Fale uma frase qualquer antes de começar a medir.
 4. No card **API e deploy** → **Selecionar aba com áudio** → a aba do Teams.
 5. O topo deve mostrar **CAPTURA ATIVA**.
 
+**Reuniões em perfis diferentes do Chrome** (uma empresa por perfil): o
+seletor de abas só lista abas do próprio perfil. Abra o painel em cada perfil,
+entre com o mesmo código e, em cada um, selecione só o card da reunião daquele
+perfil (perfil A → card A, perfil B → card B). **Parar tudo** em qualquer
+perfil encerra a captura nos dois; o outro mostra "Captura encerrada em outra
+janela." Ative alertas desktop no perfil que deve notificar: o último que
+ativou é o único que notifica; o outro mostra "Alertas em outra janela ·
+assumir". O app desktop do Teams não é capturável: use o Teams web numa aba.
+
 ## 3. Roteiro de falas
 
 Fale pelo celular, na reunião indicada, com pausas de 2–3 s entre frases.
@@ -102,6 +111,8 @@ Repita as falas 3–5 e compare latência e transcrição do nome.
 | Latência transcrição p50 / p95 | ~3–6 s / < 10 s | |
 | Latência notificação p50 | perto da transcrição | |
 | STOP (passo 9) | trechos param; compartilhamento encerra | |
+| STOP entre perfis (se usar dois) | o outro perfil também encerra | |
+| Notificação entre perfis | uma só por evento | |
 | Aba fechada (passo 10) | aviso exibido | |
 | Avisos "STT mais lento que o áudio" | nenhum ou raros | |
 
